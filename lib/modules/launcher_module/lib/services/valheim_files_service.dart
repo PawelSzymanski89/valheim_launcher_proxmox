@@ -540,10 +540,10 @@ class ValheimFilesService {
     if (decrypted == null) throw Exception('Nie można wczytać zaszyfrowanej konfiguracji FTP.');
 
     if (decrypted.usesPanel) {
-      // Sześć równoległych pobrań na jednym kliencie http — duży pack to setki
-      // plików, a każdy z osobna czekałby całe RTT do panelu. Sześć, bo powyżej
-      // wąskim gardłem staje się łącze, a nie liczba połączeń.
-      const pool = 6;
+      // Dziesięć równoległych pobrań na jednym kliencie http — duży pack to setki
+      // plików, a każdy z osobna czekałby całe RTT do panelu. Powyżej tego
+      // wąskim gardłem jest i tak łącze w górę, a nie liczba połączeń.
+      const pool = 10;
       final client = PanelClient(decrypted.panelUrl);
       var completed = 0;
       var next = 0;
