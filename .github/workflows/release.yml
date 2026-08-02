@@ -1,0 +1,66 @@
+# Auto-update z gita: push tagu v* buduje launcher i updater na Windowsie
+# i publikuje release z launcher.zip + updater.zip. Launcher u graczy pyta
+# /releases/latest tego repo i sam się aktualizuje — bez kreatora, bez FTP.
+#
+# Konfiguracja przez repository variables (Settings → Secrets and variables →
+# Actions → Variables):
+#   PANEL_URL   — np. https://valheim.klans.eu (wymagane)
+#   SERVER_NAME — nazwa pokazywana graczom (domyślnie nazwa repo)
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Bake panel config
+        shell: bash
+        run: |
+          test -n "${{ vars.PANEL_URL }}" || { echo "Set the PANEL_URL repository variable"; exit 1; }
+          CFG=$(printf '{"serverName":"%s","panelUrl":"%s","engineRepo":"%s"}' \
+            "${{ vars.SERVER_NAME || github.event.repository.name }}" \
+            "${{ vars.PANEL_URL }}" \
+            "${{ github.repository }}")
+          echo "$CFG" | tee lib/modules/launcher_module/assets/panel_config.json \
+            > lib/modules/updater_module/assets/panel_config.json
+
+      - name: Build launcher
+        working-directory: lib/modules/launcher_module
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      - name: Build updater
+        working-directory: lib/modules/updater_module
+        run: |
+          flutter pub get
+          flutter build windows --release
+
+      - name: Stamp version and pack
+        shell: bash
+        run: |
+          L=lib/modules/launcher_module/build/windows/x64/runner/Release
+          U=lib/modules/updater_module/build/windows/x64/runner/Release
+          # Launcher porównuje version.txt z tagiem najnowszego release'u.
+          echo "$GITHUB_REF_NAME" > "$L/data/flutter_assets/assets/version.txt"
+          (cd "$L" && 7z a -tzip "$GITHUB_WORKSPACE/launcher.zip" .)
+          (cd "$U" && 7z a -tzip "$GITHUB_WORKSPACE/updater.zip" .)
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            launcher.zip
+            updater.zip
