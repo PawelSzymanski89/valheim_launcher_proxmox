@@ -6,7 +6,7 @@
 [![🇬🇧 English](https://img.shields.io/badge/🇬🇧-English-0078D4?style=for-the-badge)](#-in-english)
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
-[![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows)](https://www.microsoft.com/windows)
+[![Platform](https://img.shields.io/badge/Windows%20·%20macOS%20·%20Linux-supported-0078D4)](../../releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-cygan-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/cygan)
 
@@ -39,10 +39,31 @@ gracz ──► launcher.exe ──HTTPS──► panel (valheim-proxmox)   mody
 - **Doorstop (BepInEx) instaluje launcher** z własnych zasobów przy każdym
   starcie — synchronizacja modów go nie dotyka.
 
+### Trzy systemy
+
+| System | Co pobiera gracz | Jak ładują się mody |
+|---|---|---|
+| **Windows** | `NazwaSerwera Launcher.exe` | podmieniona `winhttp.dll` (doorstop) |
+| **macOS** | `NazwaSerwera Launcher.app` | `run_bepinex.sh` + `libdoorstop.dylib`, gra startuje przez `arch` |
+| **Linux** | `NazwaSerwera Launcher` | `run_bepinex.sh` + `libdoorstop.so` |
+
+Instalację gry launcher znajduje sam, czytając **`libraryfolders.vdf`** Steama — więc
+także wtedy, gdy gra leży na innym dysku niż Steam. Strona publiczna panelu podsuwa
+paczkę dla systemu, z którego przyszedł gracz, ale wszystkie trzy są widoczne.
+
+**macOS:** aplikacja nie jest notaryzowana u Apple, więc przy pierwszym uruchomieniu
+trzeba kliknąć ją prawym przyciskiem i wybrać *Otwórz*. Sandbox jest wyłączony
+celowo — launcher musi pisać do biblioteki Steama i uruchamiać program spoza swojej
+paczki, a w piaskownicy nie może ani jednego, ani drugiego.
+
+**Linux:** wideo w tle wymaga `libmpv`; bez niego launcher działa dalej, tylko z
+ciemnym tłem zamiast filmu.
+
 ### Dla gracza
 
-Pobierz `launcher.zip` z [Releases](../../releases/latest), rozpakuj, uruchom
-`server_launcher.exe`. Wszystko dalej dzieje się samo: mody, aktualizacje, start gry.
+Pobierz paczkę dla swojego systemu ze strony serwera (albo z [Releases](../../releases/latest),
+jeśli składasz konfigurację sam), rozpakuj i uruchom. Wszystko dalej dzieje się samo:
+mody, aktualizacje, start gry.
 
 ### Dla admina serwera
 
