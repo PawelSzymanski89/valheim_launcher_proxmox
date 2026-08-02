@@ -102,7 +102,17 @@ class DecryptedConfig {
       );
 }
 
+/// Panel mode ships a plain `assets/panel_config.json` (no secrets inside —
+/// see the launcher module's crypto_config for the reasoning). Encrypted path
+/// stays as a fallback for builds from the upstream generator.
 Future<DecryptedConfig?> loadDecryptedConfig() async {
+  try {
+    final raw = await rootBundle.loadString('assets/panel_config.json');
+    final j = json.decode(raw) as Map<String, dynamic>;
+    if ((j['panelUrl'] as String? ?? '').trim().isNotEmpty) {
+      return DecryptedConfig.fromJson(j);
+    }
+  } catch (_) {}
   try {
     final salt = await loadSalt();
     if (salt == null || salt.isEmpty) return null;

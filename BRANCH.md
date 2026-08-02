@@ -42,6 +42,21 @@ wszystkich graczy bez przebudowywania czegokolwiek.
 czasu, który zmienia się wyłącznie przy podmianie pliku — dopiero wtedy launcher
 pobiera je ponownie.
 
+## Wydawanie — bez kreatora
+
+Kreator (wizard) jest na tym forku zbędny: istniał po to, żeby zapiekać konto
+FTP i sekrety w binarki na maszynie admina. W trybie panelu konfiguracja to
+**trzy jawne pola** (`serverName`, `panelUrl`, `engineRepo`) — żadne nie jest
+tajemnicą, więc leżą plaintextem w `assets/panel_config.json`, a całe
+szyfrowanie (salt + APP_SECRET) zostaje tylko jako zgodność wstecz.
+
+Wydanie robi GitHub Actions (`.github/workflows/release.yml`): push tagu `v*`
+buduje oba moduły na Windowsie i publikuje release z `launcher.zip` i
+`updater.zip`. Adres panelu bierze z repository variable **`PANEL_URL`**
+(nazwa serwera z `SERVER_NAME`, opcjonalnie). Launcher gracza pyta
+`/releases/latest` i aktualizuje się sam; updater instaluje się sam przy
+pierwszym starcie launchera. Gracz dostaje tylko `launcher.zip`.
+
 ## Stan prac
 
 - [x] `panel_client.dart` — manifest, pobieranie plików z weryfikacją `sha256`, różnica wobec stanu lokalnego, tło z pamięcią podręczną
@@ -49,5 +64,7 @@ pobiera je ponownie.
 - [x] `crypto_config.dart` — `panelUrl` i `engineRepo` w konfiguracji, ze zgodnością wstecz
 - [x] wpięcie `PanelClient` w `valheim_files_service.dart` zamiast `FtpDownloader` — tryb panelu włącza się sam, gdy config ma `panelUrl`; ścieżki FTP zostają dla configów z oryginalnego generatora
 - [x] `updater_module` — instalacja z paczki GitHuba zamiast z FTP (release niesie `launcher.zip` i `updater.zip`, wybór po nazwie assetu)
-- [x] generator — krok 3 zbiera adres panelu i repo silnika zamiast konta FTP; test połączenia odpytuje `/api/launcher/manifest` (404 = panel żyje, launcher wyłączony)
-- [ ] build i test na Windowsie (nie da się z macOS)
+- [x] generator — krok 3 zbiera adres panelu i repo silnika zamiast konta FTP; test połączenia odpytuje `/api/launcher/manifest` (404 = panel żyje, launcher wyłączony). **Uwaga:** po dodaniu release'ów z CI kreator jest w praktyce zbędny — zostaje jako zgodność wstecz.
+- [x] plaintext `assets/panel_config.json` przed ścieżką szyfrowaną w obu modułach
+- [x] `.github/workflows/release.yml` — tag `v*` → build na Windowsie → release z `launcher.zip` + `updater.zip`
+- [ ] pierwszy release: ustawić repository variable `PANEL_URL`, puścić tag `v1.0.0`, sprawdzić pełny obieg aktualizacji na Windowsie

@@ -124,10 +124,22 @@ class DecryptedConfig {
       );
 }
 
-/// Loads and decrypts the config bundled in assets.
-/// 1) Reads manifest.sig  → decrypts with APP_SECRET → real salt
-/// 2) Reads config_encrypted.json → decrypts with real salt → plain config
+/// Loads the config bundled in assets.
+///
+/// Panel mode ships a PLAIN `assets/panel_config.json` — the whole salt +
+/// APP_SECRET dance existed to hide an FTP password inside the binary, and the
+/// panel config has no secrets: the panel address and the engine repo are
+/// public by design (the manifest itself is served without login). CI bakes
+/// this file at release time; the encrypted path stays as a fallback so a
+/// build from the upstream generator still works.
 Future<DecryptedConfig?> loadDecryptedConfig() async {
+  try {
+    final raw = await rootBundle.loadString('assets/panel_config.json');
+    final j = json.decode(raw) as Map<String, dynamic>;
+    if ((j['panelUrl'] as String? ?? '').trim().isNotEmpty) {
+      return DecryptedConfig.fromJson(j);
+    }
+  } catch (_) {}
   try {
     final salt = await loadSalt();
     if (salt == null || salt.isEmpty) return null;
