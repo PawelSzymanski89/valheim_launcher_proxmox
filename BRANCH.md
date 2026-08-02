@@ -52,10 +52,11 @@ szyfrowanie (salt + APP_SECRET) zostaje tylko jako zgodność wstecz.
 
 Wydanie robi GitHub Actions (`.github/workflows/release.yml`): push tagu `v*`
 buduje oba moduły na Windowsie i publikuje release z `launcher.zip` i
-`updater.zip`. Adres panelu bierze z repository variable **`PANEL_URL`**
-(nazwa serwera z `SERVER_NAME`, opcjonalnie). Launcher gracza pyta
-`/releases/latest` i aktualizuje się sam; updater instaluje się sam przy
-pierwszym starcie launchera. Gracz dostaje tylko `launcher.zip`.
+`updater.zip` — **neutralne**, bez adresu żadnego serwera. Konfigurację
+wstrzykuje panel: `/api/launcher/download` bierze silnik z GitHuba, podmienia
+`panel_config.json` w zipie i serwuje graczom gotową paczkę. Updater czyta
+config launchera obok siebie i zachowuje go przy podmianie silnika, więc
+aktualizacja z GitHuba nie kasuje przypisania do serwera.
 
 ## Stan prac
 
