@@ -8,6 +8,7 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-cygan-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/cygan)
 
 </div>
 
@@ -91,6 +92,8 @@ Windows and publishes `launcher.zip` + `updater.zip`.
 Forked from [valheim_launcher_generator](https://github.com/PawelSzymanski89/valheim_launcher_generator) —
 the FTP-era wizard, patcher and crypto remain in the tree only as legacy fallback.
 See [BRANCH.md](BRANCH.md) for the full design rationale.
+
+Podoba się? [Postaw kawę ☕](https://buymeacoffee.com/cygan) / Like it? [Buy me a coffee ☕](https://buymeacoffee.com/cygan)
 
 *Valheim® is a registered trademark of Iron Gate AB. This is an independent,
 unofficial tool.*
