@@ -731,7 +731,7 @@ class _LauncherScreenState extends State<LauncherScreen> {
                                   const Text('© 2026 Paweł Szymański',
                                       style: _footerStyle),
                                   const Text('·', style: _footerStyle),
-                                  _footerLink('MIT',
+                                  _footerLink('PolyForm NC',
                                       'https://github.com/PawelSzymanski89/valheim_launcher_proxmox/blob/master/LICENSE'),
                                   const Text('·', style: _footerStyle),
                                   _footerLink('☕ buymeacoffee.com/cygan',
