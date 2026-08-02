@@ -24,6 +24,18 @@ class GithubEngine {
       http.Client? client})
       : _http = client ?? http.Client();
 
+  /// Release assets are named per platform (`launcher-windows.zip`,
+  /// `launcher-macos.zip`, `launcher-linux.zip`), so a client only ever fetches
+  /// the build it can actually run.
+  static String platformAsset(String module) {
+    final os = Platform.isWindows
+        ? 'windows'
+        : Platform.isMacOS
+            ? 'macos'
+            : 'linux';
+    return '$module-$os';
+  }
+
   static const _headers = {
     'Accept': 'application/vnd.github+json',
     'User-Agent': 'valheim-launcher-updater',

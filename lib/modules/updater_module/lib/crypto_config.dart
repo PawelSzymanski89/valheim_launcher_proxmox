@@ -103,28 +103,37 @@ class DecryptedConfig {
       );
 }
 
-/// The launcher's config file on disk, next to this updater. The updater ships
-/// from GitHub as a NEUTRAL package (its own bundled asset is a placeholder) —
-/// the per-server config lives in the launcher the panel handed to the player,
-/// and the updater serves whatever launcher it sits beside.
-File launcherConfigFile() {
-  final appRoot = File(Platform.resolvedExecutable).parent.parent.path;
+/// Where the per-server config lives: NEXT TO the program, not inside it.
+/// The updater ships from GitHub as a neutral package, so its own bundled asset
+/// is a placeholder - the real config belongs to the launcher it sits beside,
+/// and stays put while the program around it is replaced.
+List<File> panelConfigCandidates() {
   final sep = Platform.pathSeparator;
-  return File('$appRoot${sep}data${sep}flutter_assets${sep}assets${sep}panel_config.json');
-}
-
-/// Panel mode reads a plain `panel_config.json` (no secrets inside — see the
-/// launcher module's crypto_config for the reasoning): first the launcher's
-/// on-disk copy, then our own bundled asset. Encrypted path stays as a
-/// fallback for builds from the upstream generator.
-Future<DecryptedConfig?> loadDecryptedConfig() async {
+  final out = <File>[];
   try {
-    final raw = await launcherConfigFile().readAsString();
-    final j = json.decode(raw) as Map<String, dynamic>;
-    if ((j['panelUrl'] as String? ?? '').trim().isNotEmpty) {
-      return DecryptedConfig.fromJson(j);
+    var dir = File(Platform.resolvedExecutable).parent;
+    out.add(File('${dir.path}${sep}panel_config.json'));
+    for (var i = 0; i < 4; i++) {
+      dir = dir.parent;
+      out.add(File('${dir.path}${sep}panel_config.json'));
     }
   } catch (_) {}
+  return out;
+}
+
+/// The launcher's config file, or the first place we would create one.
+File launcherConfigFile() => panelConfigCandidates().first;
+
+Future<DecryptedConfig?> loadDecryptedConfig() async {
+  for (final f in panelConfigCandidates()) {
+    try {
+      if (!await f.exists()) continue;
+      final j = json.decode(await f.readAsString()) as Map<String, dynamic>;
+      if ((j['panelUrl'] as String? ?? '').trim().isNotEmpty) {
+        return DecryptedConfig.fromJson(j);
+      }
+    } catch (_) {}
+  }
   try {
     final raw = await rootBundle.loadString('assets/panel_config.json');
     final j = json.decode(raw) as Map<String, dynamic>;

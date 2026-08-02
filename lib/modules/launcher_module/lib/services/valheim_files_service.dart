@@ -10,6 +10,7 @@ import 'package:server_launcher/services/i18n_service.dart';
 import 'package:server_launcher/services/ftp_downloader.dart';
 import 'package:server_launcher/services/crypto_config.dart';
 import 'package:server_launcher/services/github_engine.dart';
+import 'package:server_launcher/services/game_locator.dart';
 import 'package:server_launcher/services/panel_client.dart';
 import 'package:server_launcher/services/valheim_server_service.dart';
 import 'package:path/path.dart' as p;
@@ -116,10 +117,14 @@ class ValheimFilesService {
     return diff <= finalTolerance;
   }
 
-  /// Wypakowuje doorstop.zip z assets do roota gry Valheim.
-  /// Nadpisuje istniejące pliki (doorstop_config.ini, .doorstop_version, winhttp.dll).
-  /// [gameRoot] - katalog główny gry gdzie jest valheim.exe
+  /// Wypakowuje loader BepInEx-a do roota gry.
+  ///
+  /// Windows ładuje go przez podmienioną `winhttp.dll`, a macOS i Linux przez
+  /// bibliotekę wstrzykiwaną do procesu — tam zamiast biblioteki systemowej jest
+  /// `run_bepinex.sh`, który sam ustawia zmienne i odpala grę. Stąd dwa assety
+  /// i skrypt, któremu trzeba nadać prawo wykonywania.
   Future<void> extractDoorstopToGameRoot(String gameRoot) async {
+    if (!Platform.isWindows) return _extractUnixDoorstop(gameRoot);
     try {
       if (kDebugMode) debugPrint('[ValheimFilesService] Extracting doorstop.zip to $gameRoot');
 
@@ -153,6 +158,34 @@ class ValheimFilesService {
     }
   }
 
+  /// Wypakowuje loader dla macOS i Linuksa: `run_bepinex.sh` plus biblioteka
+  /// wstrzykiwana do procesu gry. Skrypt bierze nazwę gry z argumentu, więc nie
+  /// trzeba go edytować — trzeba mu tylko nadać prawo wykonywania, bo zip go nie
+  /// niesie.
+  Future<void> _extractUnixDoorstop(String gameRoot) async {
+    try {
+      final data = await rootBundle.load('assets/doorstop_unix.zip');
+      final archive = ZipDecoder().decodeBytes(data.buffer.asUint8List());
+      final sep = Platform.pathSeparator;
+      for (final file in archive) {
+        if (!file.isFile) continue;
+        // Biblioteka drugiego systemu jest w paczce, ale na dysku tylko zaśmieca.
+        if (file.name.endsWith('.so') && !Platform.isLinux) continue;
+        if (file.name.endsWith('.dylib') && !Platform.isMacOS) continue;
+        final out = File('$gameRoot$sep${file.name.replaceAll('/', sep)}');
+        await out.parent.create(recursive: true);
+        await out.writeAsBytes(file.content as List<int>);
+      }
+      final script = File('$gameRoot${sep}run_bepinex.sh');
+      if (await script.exists()) {
+        await Process.run('chmod', ['+x', script.path]);
+      }
+      if (kDebugMode) debugPrint('[ValheimFilesService] Unix doorstop ready in $gameRoot');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ValheimFilesService] Unix doorstop failed: $e');
+    }
+  }
+
   /// Zdejmuje loader BepInEx-a z katalogu gry. Wołane, gdy serwer nie wysyła
   /// graczom żadnych modów — wtedy gra ma chodzić czysto, a sam doorstop bez
   /// BepInEx-a to tylko ładowarka szukająca nieistniejących plików.
@@ -163,6 +196,9 @@ class ValheimFilesService {
       '.doorstop_version',
       'doorstop_libs',
       'unstripped_corlib',
+      'run_bepinex.sh',
+      'libdoorstop.dylib',
+      'libdoorstop.so',
     ];
     for (final n in names) {
       final sep = Platform.pathSeparator;
@@ -180,146 +216,27 @@ class ValheimFilesService {
     }
   }
 
-  /// Returns the first found absolute path to `valheim.exe` among common locations,
-  /// or `null` if not found.
-  ///
-  /// The search is Windows-oriented; on non-Windows platforms this will always
-  /// return null.
+  /// Ścieżka do gry albo null. Na Windowsie to `valheim.exe`, na macOS
+  /// `valheim.app`, na Linuksie `valheim.x86_64` — wszystkie trzy leżą wprost w
+  /// katalogu gry, więc `File(exe).parent` jest rootem na każdym systemie.
   Future<String?> findValheimExecutable() async {
-    if (kDebugMode) debugPrint('[ValheimFilesService] Starting search for valheim.exe');
-    if (!Platform.isWindows) {
-      if (kDebugMode) debugPrint('[ValheimFilesService] Non-Windows platform detected. Skipping search.');
-      return null;
-    }
-
-    // First, check cache. If it points to a valid valheim.exe, return it immediately.
     try {
       final cached = await readCachedExePath();
-      if (cached != null && cached.isNotEmpty) {
-        final cf = File(cached);
-        if (await cf.exists()) return cf.path;
+      if (cached != null && cached.isNotEmpty && await GameLocator.looksLikeGame(cached)) {
+        return cached;
       }
     } catch (_) {}
-
-    final candidates = _commonWindowsCandidates();
-    if (kDebugMode) debugPrint('[ValheimFilesService] Candidates to check: ${candidates.length}');
-    for (final path in candidates) {
-      if (kDebugMode) debugPrint('[ValheimFilesService] Checking: $path');
-      final file = File(path);
-      if (await file.exists()) {
-        if (kDebugMode) debugPrint('[ValheimFilesService] FOUND valheim.exe at: ${file.path}');
-        return file.path;
-      }
+    final found = await GameLocator.find();
+    if (found != null) {
+      try {
+        await writeCachedExePath(found);
+      } catch (_) {}
     }
-    if (kDebugMode) debugPrint('[ValheimFilesService] valheim.exe NOT FOUND in common locations');
-    return null;
-  }
-
-  /// Returns all existing matches among the common locations.
-  Future<List<String>> findAllCandidates() async {
-    if (kDebugMode) debugPrint('[ValheimFilesService] Gathering all existing candidates');
-    if (!Platform.isWindows) {
-      if (kDebugMode) debugPrint('[ValheimFilesService] Non-Windows platform detected. Returning empty list.');
-      return <String>[];
-    }
-    final List<String> found = [];
-    final candidates = _commonWindowsCandidates();
-    if (kDebugMode) debugPrint('[ValheimFilesService] Candidates to check: ${candidates.length}');
-    for (final path in candidates) {
-      final exists = await File(path).exists();
-      if (exists) {
-        found.add(path);
-        if (kDebugMode) debugPrint('[ValheimFilesService] Candidate exists: $path');
-      } else {
-        if (kDebugMode) debugPrint('[ValheimFilesService] Candidate missing: $path');
-      }
-    }
-    if (kDebugMode) debugPrint('[ValheimFilesService] Found ${found.length} candidate(s)');
     return found;
   }
 
-  /// 10 popular Windows Steam locations where Valheim might be installed.
-  /// Note: We include both Steam and SteamLibrary on common drives.
-  List<String> _commonWindowsCandidates() {
-    final List<String> drives = _likelyDrives();
-
-    // We will generate candidates from common Steam root patterns
-    // and then map to the Valheim exe path.
-    final List<String> steamRoots = [
-      r"C:\\Program Files (x86)\\Steam",
-      r"C:\\Program Files\\Steam",
-      r"C:\\Steam",
-      r"C:\\Program Files (x86)\\SteamLibrary",
-      r"C:\\Games\\Steam",
-    ];
-
-    // Build base roots for additional drives (D:, E:), common patterns
-    for (final d in drives) {
-      // Skip C: as already covered above
-      if (d.toUpperCase() == 'C') continue;
-      // Only add patterns for drives that actually exist to avoid probing many invalid paths
-      try {
-        final root = '${d}:\\';
-        if (!Directory(root).existsSync()) continue;
-      } catch (_) {
-        continue;
-      }
-      steamRoots.addAll([
-        '$d:\\Steam',
-        '$d:\\SteamLibrary',
-        '$d:\\Games\\Steam',
-      ]);
-    }
-
-    // Ensure uniqueness and cap to top few to keep the final candidate list tight
-    final uniqueRoots = steamRoots.toSet().toList();
-    if (kDebugMode) debugPrint('[ValheimFilesService] Steam roots considered: ${uniqueRoots.length}');
-
-    final List<String> candidates = [];
-    for (final root in uniqueRoots) {
-      candidates.add(
-        _joinWindows([root, 'steamapps', 'common', 'Valheim', 'valheim.exe']),
-      );
-    }
-
-    // We only need the first 10 most common ones. To meet the requirement strictly,
-    // we will return at least 10 by ordering typical ones first.
-    final List<String> topOrdered = [
-      r"C:\\Program Files (x86)\\Steam\\steamapps\\common\\Valheim\\valheim.exe",
-      r"C:\\Program Files\\Steam\\steamapps\\common\\Valheim\\valheim.exe",
-      r"C:\\Steam\\steamapps\\common\\Valheim\\valheim.exe",
-      r"C:\\Program Files (x86)\\SteamLibrary\\steamapps\\common\\Valheim\\valheim.exe",
-      r"C:\\Games\\Steam\\steamapps\\common\\Valheim\\valheim.exe",
-      r"D:\\Steam\\steamapps\\common\\Valheim\\valheim.exe",
-      r"D:\\SteamLibrary\\steamapps\\common\\Valheim\\valheim.exe",
-      r"D:\\Games\\Steam\\steamapps\\common\\Valheim\\valheim.exe",
-      r"E:\\Steam\\steamapps\\common\\Valheim\\valheim.exe",
-      r"E:\\SteamLibrary\\steamapps\\common\\Valheim\\valheim.exe",
-    ];
-
-    // Merge topOrdered with generated candidates while preserving order and uniqueness
-    final seen = <String>{};
-    final merged = <String>[];
-    for (final p in topOrdered.followedBy(candidates)) {
-      if (seen.add(p)) merged.add(p);
-    }
-
-    if (kDebugMode) debugPrint('[ValheimFilesService] Generated candidate paths: ${merged.length}');
-
-    // Keep only the first N significant candidates to avoid an excessively long list
-    // while ensuring we have at least the requested 10 popular locations represented.
-    return merged.take(30).toList();
-  }
-
-  List<String> _likelyDrives() {
-    // Return all drive letters A..Z so search covers every possible drive letter.
-    // We'll generate uppercase letters 'A'..'Z' and let the caller decide which ones actually exist.
-    return List<String>.generate(26, (i) => String.fromCharCode(65 + i));
-  }
-
-  String _joinWindows(List<String> parts) {
-    return parts.join('\\');
-  }
+  /// Wszystkie znalezione instalacje — gracz z dwiema bibliotekami Steama widzi obie.
+  Future<List<String>> findAllCandidates() => GameLocator.findAll();
 
   /// Pobiera plik `mods_list.json` z serwera FTP (ścieżka zdalna np. '/BepInEx/mods_list.json')
   /// i zapisuje go w katalogu gry Valheim (root folder, tam gdzie znajduje się valheim.exe).
@@ -1174,7 +1091,7 @@ class ValheimFilesService {
       {required void Function(double progress, String status) onProgress}) async {
     final engine = _engine(cfg);
     try {
-      final release = await engine.latest(asset: 'updater');
+      final release = await engine.latest(asset: GithubEngine.platformAsset('updater'));
       if (release == null) {
         // Brak sieci/wydania nie może zatrzymać startu gry.
         onProgress(1.0, I18n.instance.t('updater_up_to_date'));
@@ -1243,7 +1160,7 @@ class ValheimFilesService {
       required String currentVersion}) async {
     final engine = _engine(cfg);
     try {
-      final release = await engine.latest(asset: 'launcher');
+      final release = await engine.latest(asset: GithubEngine.platformAsset('launcher'));
       if (release == null || !release.isNewerThan(currentVersion)) {
         onProgress(1.0, I18n.instance.t('launcher_up_to_date'));
         return false;
@@ -1304,6 +1221,8 @@ Map<String, dynamic> _compareRemoteAndLocalTask(_CompareTaskParams params) {
       // Pokrywa też dawne 'doorstop_config.ini.bak' (dopasowanie contains).
       'doorstop_config.ini',
       'winhttp.dll',
+      'run_bepinex.sh',
+      'libdoorstop.',
     ];
     for (final pat in black) {
       if (s.contains(pat.toLowerCase())) return true;

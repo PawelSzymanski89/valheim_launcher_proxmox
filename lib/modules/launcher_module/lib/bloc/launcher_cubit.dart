@@ -539,8 +539,9 @@ class LauncherCubit extends Cubit<LauncherState> {
         final out = (res.stdout ?? '').toString().toLowerCase();
         return out.contains(imageName.toLowerCase());
       } else {
-        // On non-Windows try pgrep
-        final res = await Process.run('pgrep', ['-f', imageName]);
+        // On non-Windows try pgrep. Case-insensitive because the bundle is
+        // `valheim.app` while the process inside it is `Valheim`.
+        final res = await Process.run('pgrep', ['-fi', imageName]);
         return (res.stdout ?? '')
             .toString()
             .trim()
@@ -608,6 +609,18 @@ class LauncherCubit extends Cubit<LauncherState> {
     }
   }
 
+  /// Na macOS „grą" jest katalog `valheim.app`, którego nie da się uruchomić
+  /// wprost — wykonywalny plik siedzi w środku. Na Linuksie i Windowsie ścieżka
+  /// jest już plikiem.
+  String _unixGameBinary(String exe) {
+    if (Platform.isMacOS && exe.endsWith('.app')) {
+      final sep = Platform.pathSeparator;
+      final name = exe.split(sep).last.replaceAll('.app', '');
+      return '$exe${sep}Contents${sep}MacOS$sep$name';
+    }
+    return exe;
+  }
+
   Future<void> launchGame() async {
     final exe = state.valheimExePath;
     if (exe == null || exe.isEmpty) {
@@ -656,8 +669,9 @@ class LauncherCubit extends Cubit<LauncherState> {
       final file = File(exe);
       final workDir = file.parent.path;
 
-      // Verify file exists before attempting to start
-      if (!await file.exists()) {
+      // Verify the game is there before attempting to start. On macOS the "exe"
+      // is `valheim.app`, a directory, so a file-only check would refuse to launch.
+      if (!await file.exists() && !await Directory(exe).exists()) {
         _emitStatus('game_executable_missing', params: {'exe': exe}, progressFileName: '');
         if (kDebugMode) debugPrint(
             '[LauncherCubit] launchGame: exe not found at $exe');
@@ -678,8 +692,18 @@ class LauncherCubit extends Cubit<LauncherState> {
         }
 
         try {
+          // Na macOS i Linuksie mody ładuje `run_bepinex.sh` — bierze grę jako
+          // pierwszy argument, resztę przekazuje dalej, i sam ogarnia Apple
+          // Silicon. Bez modów odpalamy grę wprost, żeby nie było skryptu
+          // szukającego BepInEx-a, którego nie ma.
+          final launcherScript = File('$workDir${Platform.pathSeparator}run_bepinex.sh');
+          final useScript = !Platform.isWindows && await launcherScript.exists();
+          final startExe = useScript ? launcherScript.path : _unixGameBinary(exe);
+          final startArgs = useScript
+              ? [exe.split(Platform.pathSeparator).last, ...launchArgs]
+              : launchArgs;
           final detachedProc = await Process.start(
-              exe, launchArgs, workingDirectory: workDir,
+              startExe, startArgs, workingDirectory: workDir,
               mode: ProcessStartMode.detached,
               runInShell: false);
           await _appendLaunchLog(

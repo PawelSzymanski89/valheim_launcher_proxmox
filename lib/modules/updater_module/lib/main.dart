@@ -233,7 +233,7 @@ class _UpdaterPageState extends State<UpdaterPage> {
           : GithubEngine(repo: cfg.engineRepo.trim());
       final tmpFile = File(localZipFile.path + '.downloading');
       try {
-        final release = await engine.latest(asset: 'launcher');
+        final release = await engine.latest(asset: GithubEngine.platformAsset('launcher'));
         if (release == null) throw 'brak plikow na serwerze';
         if (await tmpFile.exists()) await tmpFile.delete();
         final ok = await engine.download(release, tmpFile.path,

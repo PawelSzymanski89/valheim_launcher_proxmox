@@ -66,3 +66,5 @@ templates/
 
 # Secret key (auto-generated on first build, never commit!)
 .env
+# builds lokalne
+lib/modules/*/build/

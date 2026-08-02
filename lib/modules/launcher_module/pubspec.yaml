@@ -40,7 +40,9 @@ dependencies:
   # Video background (media_kit for reliable desktop playback)
   media_kit: ^1.1.11
   media_kit_video: ^1.2.8
-  media_kit_libs_windows_video: ^1.0.11
+  # Jedna paczka na wszystkie systemy — wciąga biblioteki właściwe dla platformy,
+  # bo wersja windowsowa nie ma czego dostarczyć na macOS ani na Linuksie.
+  media_kit_libs_video: ^1.0.5
 
   # Open external links
   url_launcher: ^6.3.0
@@ -98,6 +100,7 @@ flutter:
     - assets/panel_config.json
     - assets/manifest.sig
     - assets/doorstop.zip
+    - assets/doorstop_unix.zip
     - assets/lang/en/translations.json
     - assets/lang/en/flag.png
     - assets/lang/pl/translations.json

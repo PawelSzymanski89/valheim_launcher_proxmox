@@ -1,8 +1,10 @@
-# Push tagu v* buduje NEUTRALNĄ paczkę silnika: launcher.zip + updater.zip
-# bez adresu żadnego serwera (panel_config.json zostaje placeholderem).
-# Konfigurację wstrzykuje admin panel (valheim-proxmox) przy pobieraniu —
-# gracz dostaje gotowy launcher z panelu, nie z GitHuba. GitHub służy tylko
-# updaterowi jako źródło aktualizacji silnika.
+# Push tagu v* buduje NEUTRALNE paczki silnika dla Windowsa, macOS i Linuksa —
+# bez adresu żadnego serwera. Konfigurację (panel_config.json) dokłada admin
+# panel przy pobieraniu, OBOK programu, nie w środku: na macOS plik wewnątrz
+# podpisanego .app zerwałby podpis, a tak paczka zostaje nietknięta.
+#
+# Nazwy assetów niosą platformę (launcher-macos.zip itd.), bo launcher pyta
+# GitHuba o wydanie dla systemu, na którym akurat działa.
 name: release
 
 on:
@@ -14,7 +16,17 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+          - os: ubuntu-latest
+            platform: linux
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,30 +35,61 @@ jobs:
           channel: stable
           cache: true
 
+      # Flutter na Linuksie potrzebuje GTK i ninja, a media_kit — libmpv.
+      - name: Linux build deps
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev mpv
+
       - name: Build launcher
         working-directory: lib/modules/launcher_module
         run: |
           flutter pub get
-          flutter build windows --release
+          flutter build ${{ matrix.platform }} --release
 
       - name: Build updater
         working-directory: lib/modules/updater_module
         run: |
           flutter pub get
-          flutter build windows --release
+          flutter build ${{ matrix.platform }} --release
 
       - name: Stamp version and pack
         shell: bash
         run: |
-          L=lib/modules/launcher_module/build/windows/x64/runner/Release
-          U=lib/modules/updater_module/build/windows/x64/runner/Release
-          # Launcher porównuje version.txt z tagiem najnowszego release'u.
-          echo "$GITHUB_REF_NAME" > "$L/data/flutter_assets/assets/version.txt"
-          (cd "$L" && 7z a -tzip "$GITHUB_WORKSPACE/launcher.zip" .)
-          (cd "$U" && 7z a -tzip "$GITHUB_WORKSPACE/updater.zip" .)
+          set -e
+          case "${{ matrix.platform }}" in
+            windows)
+              L=lib/modules/launcher_module/build/windows/x64/runner/Release
+              U=lib/modules/updater_module/build/windows/x64/runner/Release
+              echo "$GITHUB_REF_NAME" > "$L/data/flutter_assets/assets/version.txt"
+              (cd "$L" && 7z a -tzip "$GITHUB_WORKSPACE/launcher-windows.zip" .)
+              (cd "$U" && 7z a -tzip "$GITHUB_WORKSPACE/updater-windows.zip" .)
+              ;;
+            macos)
+              L=lib/modules/launcher_module/build/macos/Build/Products/Release
+              U=lib/modules/updater_module/build/macos/Build/Products/Release
+              echo "$GITHUB_REF_NAME" > "$L/server_launcher.app/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/version.txt"
+              # Podpis ad-hoc po zmianie zawartości — bez niego macOS uznaje
+              # aplikację za uszkodzoną. Notaryzacji nie ma, więc gracz i tak
+              # otwiera ją raz przez prawy przycisk (opisane w README).
+              codesign --force --deep --sign - "$L/server_launcher.app"
+              codesign --force --deep --sign - "$U/server_updater.app"
+              # ditto, nie zip: zachowuje dowiązania i prawa w pakiecie .app
+              (cd "$L" && ditto -c -k --sequesterRsrc --keepParent server_launcher.app "$GITHUB_WORKSPACE/launcher-macos.zip")
+              (cd "$U" && ditto -c -k --sequesterRsrc --keepParent server_updater.app "$GITHUB_WORKSPACE/updater-macos.zip")
+              ;;
+            linux)
+              L=lib/modules/launcher_module/build/linux/x64/release/bundle
+              U=lib/modules/updater_module/build/linux/x64/release/bundle
+              echo "$GITHUB_REF_NAME" > "$L/data/flutter_assets/assets/version.txt"
+              (cd "$L" && zip -qry "$GITHUB_WORKSPACE/launcher-linux.zip" .)
+              (cd "$U" && zip -qry "$GITHUB_WORKSPACE/updater-linux.zip" .)
+              ;;
+          esac
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            launcher.zip
-            updater.zip
+            launcher-${{ matrix.platform }}.zip
+            updater-${{ matrix.platform }}.zip

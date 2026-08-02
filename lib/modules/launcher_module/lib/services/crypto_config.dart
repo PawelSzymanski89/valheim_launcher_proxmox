@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -124,15 +125,46 @@ class DecryptedConfig {
       );
 }
 
-/// Loads the config bundled in assets.
+/// Every place a panel config may sit, nearest first.
 ///
-/// Panel mode ships a PLAIN `assets/panel_config.json` — the whole salt +
-/// APP_SECRET dance existed to hide an FTP password inside the binary, and the
-/// panel config has no secrets: the panel address and the engine repo are
-/// public by design (the manifest itself is served without login). CI bakes
-/// this file at release time; the encrypted path stays as a fallback so a
-/// build from the upstream generator still works.
+/// The panel writes `panel_config.json` NEXT TO the program rather than inside
+/// it. On macOS that is the only workable spot: editing a file inside a signed
+/// `.app` breaks its seal and the system then refuses to open it. It also means
+/// an update can replace the whole program without touching the file that says
+/// which server this launcher belongs to.
+List<File> panelConfigCandidates() {
+  final sep = Platform.pathSeparator;
+  final out = <File>[];
+  try {
+    var dir = File(Platform.resolvedExecutable).parent;
+    out.add(File('${dir.path}${sep}panel_config.json'));
+    // macOS: the binary lives in Foo.app/Contents/MacOS, so "beside the app" is
+    // three levels up. Also covers the updater, which sits one level down.
+    for (var i = 0; i < 3; i++) {
+      dir = dir.parent;
+      out.add(File('${dir.path}${sep}panel_config.json'));
+    }
+  } catch (_) {}
+  return out;
+}
+
+/// Loads the launcher's configuration.
+///
+/// Panel mode uses PLAIN json — the whole salt + APP_SECRET dance existed to
+/// hide an FTP password inside the binary, and this config has no secrets: the
+/// panel address and the engine repo are public by design (the manifest itself
+/// is served without login). The encrypted path stays as a fallback so a build
+/// from the upstream generator still works.
 Future<DecryptedConfig?> loadDecryptedConfig() async {
+  for (final f in panelConfigCandidates()) {
+    try {
+      if (!await f.exists()) continue;
+      final j = json.decode(await f.readAsString()) as Map<String, dynamic>;
+      if ((j['panelUrl'] as String? ?? '').trim().isNotEmpty) {
+        return DecryptedConfig.fromJson(j);
+      }
+    } catch (_) {}
+  }
   try {
     final raw = await rootBundle.loadString('assets/panel_config.json');
     final j = json.decode(raw) as Map<String, dynamic>;
