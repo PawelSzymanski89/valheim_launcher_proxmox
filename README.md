@@ -1,23 +1,9 @@
 <div align="center">
 
-# ⚔️ Valheim Launcher Generator
+# ⚔️ Valheim Launcher — silnik dla [valheim-proxmox](https://github.com/PawelSzymanski89/valheim-proxmox)
 
-[![🇬🇧 English](https://img.shields.io/badge/🇬🇧-English-0078D4?style=for-the-badge)](#-english-version)
-[![🇵🇱 Polski](https://img.shields.io/badge/🇵🇱-Polski-DC143C?style=for-the-badge)](#-wersja-polska)
-
-</div>
-
----
-
-<br>
-
-## 🇬🇧 English Version
-
-<div align="center">
-
-**Generate a fully configured, encrypted launcher suite for your private Valheim server — in 4 steps.**
-
-**⚠️ Beta** — feedback welcome via [Issues](https://github.com/PawelSzymanski89/valheim_launcher_generator/issues)!
+[![🇵🇱 Polski](https://img.shields.io/badge/🇵🇱-Polski-DC143C?style=for-the-badge)](#-po-polsku)
+[![🇬🇧 English](https://img.shields.io/badge/🇬🇧-English-0078D4?style=for-the-badge)](#-in-english)
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows)](https://www.microsoft.com/windows)
@@ -25,294 +11,86 @@
 
 </div>
 
-<br>
-<img src="docs/screenshots/launcher_preview.png" alt="Generated Valheim Launcher" width="800"/>
-<br>
+---
 
-### What is this?
+## 🇵🇱 Po polsku
 
-**Valheim Launcher Generator** is a Windows desktop application built with Flutter.  
-It's a 4-step wizard that lets any private server admin generate a branded, ready-to-distribute set of **3 standalone executables** — configured and encrypted specifically for their server.
+Projekt wspierający dla **valheim-proxmox**: launcher dla graczy + autoaktualizator,
+budowane i wydawane **automatycznie przez CI**. Niczego nie generuje się z ręki —
+kreator z oryginalnego projektu jest tu zbędny i nieużywany.
 
-**Completely Self-Contained**: Thanks to a pre-compiled template architecture, generating a custom launcher takes **seconds** and **requires NO programming knowledge or Flutter SDK**. Fill in the form, click **Generate**, get 3 `.exe` files.
-
-### Generated Suite
-
-| App | Purpose |
-|---|---|
-| `{ServerName} Launcher.exe` | Players launch Valheim with one click — auto-syncs mods and connects to your server |
-| `{ServerName} Patcher.exe` | Admin tool — run on your PC to scan the server's mods via FTP and create a manifest |
-| `{ServerName} Updater.exe` | Checks for launcher/updater updates and downloads them from FTP |
-
-All three are standalone, portable Windows executables. No installation needed.
-
-### How It Works
-
-1. **Generator** — Download the generator, enter your server details (IP, password, FTP), add your logo and background, click **Generate** — you get 3 ready-made `.exe` files
-2. **Patcher** — On your PC, run the Patcher which connects to your server via FTP, scans installed mods (BepInEx), and creates a manifest of all mod files
-3. **Players** — Get a single EXE. They launch it and the launcher automatically:
-   - 📋 Compares local mods with the server's manifest
-   - ⬇️ Downloads missing mods and updates outdated ones
-   - 🗑️ Removes mods the server no longer uses
-   - ▶️ Launches the game with one click
-
-### Requirements
-
-- Modded Valheim server (BepInEx)
-- FTP server mirroring the server's mod folder structure **or** root FTP access to the game server itself
-- Windows 10/11
-
-### 🖼️ Wizard Steps — Screenshots
-
-#### Step 1 — Branding
-> Set your server name and select a background video/image for the launcher.
-
-![Step 1 — Branding](docs/screenshots/step1_branding.png)
-
-#### Step 2 — Server Details
-> Enter the Valheim game server address (IP:port) and the server password.
-
-![Step 2 — Server](docs/screenshots/step2_server.png)
-
-#### Step 3 — File Server Credentials
-> Configure your FTP/SFTP host, port, username and password. Use **Test Connection** to verify.
-
-![Step 3 — FTP/SFTP](docs/screenshots/step3_ftp.png)
-
-#### Step 4 — Configuration Encryption
-> Generate a unique encryption salt that protects all credentials in the generated executables. The salt is stored in Windows Registry — **losing it means a full reconfiguration.**
-
-![Step 4 — Security](docs/screenshots/step4_security.png)
-
-### Key Features
-
-- ⚡ **Instant Generation** — Pre-compiled template architecture generates launchers in seconds without needing the Flutter SDK setup
-- 🎬 **Optimized Video Background** — Bundled FFmpeg automatically compresses user `.mp4` backgrounds for smooth, stutter-free performance
-- 🔐 **Encrypted credentials** — FTP passwords and server data are XOR-encrypted with SHA-256, never stored as plaintext
-- 🌍 **Multilingual** — Polish / English (i18n via ARB)
-- 📦 **Portable executables** — Each app runs standalone, no runtime required
-- 🔄 **Auto-update** — Updater checks FTP version file and downloads newer launcher automatically
-- 🧩 **BepInEx mod sync** — Patcher scans FTP, computes checksums, syncs mods to local Valheim
-- 🔌 **FTP + SFTP** — Auto-detects which protocol the server supports
-- 🎨 **Dynamic icons** — Pixel-art icons generated automatically from server name acronyms
-
-### Architecture
+### Jak to działa
 
 ```
-vaheim_launcher_generator/
-├── lib/
-│   ├── generator/           # 4-step wizard UI + state
-│   ├── modules/
-│   │   ├── launcher_module/ # → Launcher.exe
-│   │   ├── patcher_module/  # → Patcher.exe
-│   │   └── updater_module/  # → Updater.exe
-│   ├── utils/
-│   │   └── crypto_service.dart   # HMAC-SHA256 XOR encrypt/decrypt
-│   └── build_service.dart        # Build pipeline orchestrator
-└── test/
-    └── crypto_service_test.dart  # 10 unit tests ✅
+gracz ──► launcher.exe ──HTTPS──► panel (valheim-proxmox)   mody, tło, dane serwera
+                       └──────────► GitHub Releases          aktualizacje silnika
 ```
 
-### Getting Started (End Users)
+- **Zero kont i sekretów w binarce.** Launcher zna tylko adres panelu
+  (jawny `assets/panel_config.json`, zapiekany przez CI). Manifest modów, adres
+  i port serwera, wymóg hasła oraz tło przychodzą z panelu przy każdym starcie.
+- **Zero FTP i zero Patchera.** Panel liczy manifest na żywo z dysku —
+  instalacja moda w panelu od razu trafia do graczy. Każdy plik ma `sha256`,
+  launcher weryfikuje pobrania.
+- **Aktualizacje z tego repozytorium.** Launcher porównuje swój `version.txt`
+  z najnowszym wydaniem, oddaje ster updaterowi i się zamyka; updater podmienia
+  pliki i uruchamia go z powrotem. Jedno wydanie trafia do wszystkich serwerów.
+- **Doorstop (BepInEx) instaluje launcher** z własnych zasobów przy każdym
+  starcie — synchronizacja modów go nie dotyka.
 
-Download the latest release from [GitHub Releases](https://github.com/PawelSzymanski89/valheim_launcher_generator/releases) — no SDK or dev tools needed.
+### Dla gracza
 
-### Building from Source (Developers)
+Pobierz `launcher.zip` z [Releases](../../releases/latest), rozpakuj, uruchom
+`server_launcher.exe`. Wszystko dalej dzieje się samo: mody, aktualizacje, start gry.
 
-```powershell
-git clone https://github.com/PawelSzymanski89/valheim_launcher_generator.git
-cd valheim_launcher_generator
-# .env with APP_SECRET is auto-generated on first template build
-powershell -ExecutionPolicy Bypass -File scripts/build_templates.ps1
-powershell -ExecutionPolicy Bypass -File scripts/package_generator.ps1
-```
+### Dla admina serwera
 
-### ⚠️ Disclaimer & Hobby Project Notice
+1. W panelu (zakładka **Launcher**) włącz udostępnianie i ewentualnie wgraj tło.
+2. W ustawieniach repozytorium ustaw zmienną **`PANEL_URL`**
+   (np. `https://valheim.example.com`), opcjonalnie `SERVER_NAME`.
+3. Wypchnij tag `v*` — GitHub Actions zbuduje na Windowsie i opublikuje
+   `launcher.zip` + `updater.zip` (`.github/workflows/release.yml`).
 
-> **This is a hobby project.** Use it at your own risk and with caution.
->
-> - The author **is not responsible** for any data leaks, server damage, data loss, or any other issues that may arise from using this software.
-> - **Always create regular backups** of your server before using the launcher, patcher, or updater.
-> - The application has been secured to the best of the author's knowledge and abilities, but no software is 100% secure.
-> - The author is **open to suggestions** and improvements — feel free to open an issue or submit a pull request.
-
-### ⚖️ Legal Notice
-
-> **Valheim®** is a registered trademark of **Iron Gate AB**.  
-> This application is an independent, unofficial tool and uses the name "Valheim" solely for the purpose of identifying compatibility.  
-> We do not claim any rights to the Valheim brand or logo.
-
-### 🚫 Attribution — Required
-
-> **Removing the author's name, credits, or the link to this generator from any fork or derivative work is strictly prohibited.**
->
-> Every generated launcher contains a footer credit:  
-> *Designed with ❤️ by [cygan](https://www.linkedin.com/in/pszym89/)*
->
-> This attribution **must remain intact** in all forks, copies, and derivative works.  
-> Every generated launcher also includes information that it was created using:  
-> **[Valheim Launcher Generator](https://github.com/PawelSzymanski89/valheim_launcher_generator)**
-
-### Commercial & Custom Orders
-
-Need a custom-branded launcher suite for your server or community?
-
-📧 **pawel@howtodev.it**  
-🐙 **[github.com/PawelSzymanski89](https://github.com/PawelSzymanski89)**
+Panel wystawia launcherowi trzy otwarte adresy (`/api/launcher/manifest`,
+`/api/launcher/files/…`, `/api/launcher/background`); wyłączenie w zakładce
+odpowiada na nich `404`.
 
 ---
 
-<br>
+## 🇬🇧 In English
 
-## 🇵🇱 Wersja Polska
+Support project for **valheim-proxmox**: the players' launcher + self-updater,
+built and released **entirely by CI**. Nothing is generated by hand — the wizard
+from the upstream project is unused here.
 
-<div align="center">
+### How it works
 
-**Stwórz własny, zaszyfrowany zestaw aplikacji dla swojego prywatnego serwera Valheim — w 4 krokach.**
+- **No accounts, no secrets in the binary.** The launcher only knows the panel
+  address (plain `assets/panel_config.json`, baked by CI). The mod manifest,
+  game server address/port, password flag and background come from the panel on
+  every start.
+- **No FTP, no Patcher.** The panel computes the manifest live from disk, every
+  file carries a `sha256` and downloads are verified.
+- **Engine updates come from this repository's Releases.** The launcher detects
+  a newer tag, hands over to the updater and exits; the updater swaps the files
+  and starts it again.
 
-**⚠️ Beta** — uwagi i zgłoszenia błędów mile widziane przez [Issues](https://github.com/PawelSzymanski89/valheim_launcher_generator/issues)!
+### Players
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
-[![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows)](https://www.microsoft.com/windows)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+Grab `launcher.zip` from [Releases](../../releases/latest), unzip, run
+`server_launcher.exe`. Mods, updates and game start are automatic.
 
-</div>
+### Server admins
 
-<br>
-<img src="docs/screenshots/launcher_preview.png" alt="Wygenerowany Valheim Launcher" width="800"/>
-<br>
-
-### Co to jest?
-
-**Valheim Launcher Generator** to desktopowa aplikacja Windows zbudowana we Flutterze.  
-Działa jako kreator (wizard) w 4 krokach, który pozwala administratorowi prywatnego serwera Valheim wygenerować gotowy, markowy zestaw **3 samodzielnych plików `.exe`** — skonfigurowanych i zaszyfrowanych pod jego konkretny serwer.
-
-**W pełni samodzielny**: Dzięki architekturze wstępnie skompilowanych szablonów, generowanie niestandardowego launchera zajmuje **sekundy** i **nie wymaga wiedzy programistycznej ani Flutter SDK**. Wypełnij formularz, kliknij **Generuj**, odbierz 3 pliki `.exe`.
-
-### Generowane aplikacje
-
-| Aplikacja | Przeznaczenie |
-|---|---|
-| `{NazwaSerwera} Launcher.exe` | Gracze uruchamiają Valheim jednym kliknięciem — automatyczna synchronizacja modów i połączenie z serwerem |
-| `{NazwaSerwera} Patcher.exe` | Narzędzie admina — uruchamiasz na swoim komputerze, skanuje mody serwera przez FTP i tworzy manifest |
-| `{NazwaSerwera} Updater.exe` | Sprawdza dostępność nowej wersji launchera/updatera i pobiera automatycznie |
-
-Wszystkie trzy są przenośnymi plikami `.exe` — nie wymagają instalacji.
-
-### Jak to działa?
-
-1. **Generator** — pobierasz generator, wpisujesz dane serwera (IP, hasło, FTP), wrzucasz logo i tło, klikasz **Generuj** — dostajesz 3 gotowe pliki `.exe`
-2. **Patcher** — na swoim komputerze uruchamiasz Patcher, który łączy się z serwerem przez FTP, skanuje zainstalowane mody (BepInEx) i tworzy manifest wszystkich plików
-3. **Gracze** — dostają jednego EXE. Uruchamiają i launcher automatycznie:
-   - 📋 Porównuje lokalne mody z manifestem serwera
-   - ⬇️ Pobiera brakujące i aktualizuje nieaktualne
-   - 🗑️ Usuwa mody których serwer już nie używa
-   - ▶️ Odpala grę jednym kliknięciem
-
-### Wymagania
-
-- Zmodowany serwer Valheim (BepInEx)
-- Serwer FTP z odwzorowaną strukturą katalogów serwera **lub** bezpośredni dostęp FTP do katalogu głównego serwera
-- Windows 10/11
-
-### 🖼️ Kroki kreatora — Zrzuty ekranu
-
-#### Krok 1 — Branding
-> Ustaw nazwę swojego serwera i wybierz tło (wideo lub obraz) dla launchera.
-
-![Krok 1 — Branding](docs/screenshots/step1_branding.png)
-
-#### Krok 2 — Dane serwera
-> Wprowadź adres serwera gry Valheim (IP:port) oraz hasło serwera.
-
-![Krok 2 — Serwer](docs/screenshots/step2_server.png)
-
-#### Krok 3 — Dane serwera plików
-> Skonfiguruj host FTP/SFTP, port, nazwę użytkownika i hasło. Użyj **Test Connection** aby zweryfikować połączenie.
-
-![Krok 3 — FTP/SFTP](docs/screenshots/step3_ftp.png)
-
-#### Krok 4 — Szyfrowanie konfiguracji
-> Wygeneruj unikalne ziarno szyfrujące (salt), które zabezpiecza wszystkie dane uwierzytelniające w generowanych plikach wykonywalnych. Salt jest zapisywany w Rejestrze Windows — **jego utrata oznacza pełną rekonfigurację.**
-
-![Krok 4 — Bezpieczeństwo](docs/screenshots/step4_security.png)
-
-### Kluczowe funkcje
-
-- ⚡ **Błyskawiczne generowanie** — Architektura skompilowanych szablonów generuje pliki w kilka sekund; brak wymogu instalacji Flutter SDK
-- 🎬 **Zoptymalizowane Tło Wideo** — Wbudowany w paczkę FFmpeg automatycznie kompresuje tło wideo dla maksymalnej płynności (bez klatkowania)
-- 🔐 **Szyfrowanie** — hasła FTP i dane serwera zaszyfrowane XOR+SHA-256, brak plaintextu w binarce
-- 🌍 **Wielojęzyczność** — Polski / Angielski (i18n via ARB)
-- 📦 **Przenośne exe** — każda aplikacja działa samodzielnie bez instalacji
-- 🔄 **Auto-aktualizacja** — updater sprawdza plik wersji na FTP i pobiera nowszą wersję launchera
-- 🧩 **Synchronizacja modów BepInEx** — patcher skanuje FTP, liczy sumy kontrolne, synchronizuje mody
-- 🔌 **FTP + SFTP** — automatyczne wykrycie protokołu serwera
-- 🎨 **Dynamiczne ikony** — pixel-artowe ikony generowane automatycznie z akronimów nazwy serwera
-
-### Architektura
-
-```
-vaheim_launcher_generator/
-├── lib/
-│   ├── generator/           # Wizard 4-krokowy + zarządzanie stanem
-│   ├── modules/
-│   │   ├── launcher_module/ # → Launcher.exe
-│   │   ├── patcher_module/  # → Patcher.exe
-│   │   └── updater_module/  # → Updater.exe
-│   ├── utils/
-│   │   └── crypto_service.dart   # Szyfrowanie HMAC-SHA256 XOR
-│   └── build_service.dart        # Orkiestrator budowania
-└── test/
-    └── crypto_service_test.dart  # 10 testów jednostkowych ✅
-```
-
-### Uruchomienie (Użytkownicy)
-
-Pobierz najnowszą wersję z [GitHub Releases](https://github.com/PawelSzymanski89/valheim_launcher_generator/releases) — nie potrzebujesz SDK ani narzędzi developerskich.
-
-### Budowanie ze źródeł (Developerzy)
-
-```powershell
-git clone https://github.com/PawelSzymanski89/valheim_launcher_generator.git
-cd valheim_launcher_generator
-# .env z APP_SECRET generuje się automatycznie przy pierwszym buildzie
-powershell -ExecutionPolicy Bypass -File scripts/build_templates.ps1
-powershell -ExecutionPolicy Bypass -File scripts/package_generator.ps1
-```
-
-### ⚠️ Zastrzeżenie — Projekt hobbystyczny
-
-> **To jest projekt hobbystyczny.** Używaj go z rozwagą i na własne ryzyko.
->
-> - Autor **nie ponosi odpowiedzialności** za wyciek danych, uszkodzenie serwera, utratę danych ani żadne inne problemy wynikające z użytkowania tego oprogramowania.
-> - **Zawsze twórz regularne kopie zapasowe** swojego serwera przed użyciem launchera, patchera lub updatera.
-> - Aplikacja została zabezpieczona zgodnie z najlepszą wiedzą i umiejętnościami autora, ale żadne oprogramowanie nie jest w 100% bezpieczne.
-> - Autor jest **otwarty na sugestie** i ulepszenia — zachęcamy do zgłaszania Issue lub Pull Requestów.
-
-### ⚖️ Nota prawna
-
-> **Valheim®** jest zarejestrowanym znakiem towarowym **Iron Gate AB**.  
-> Niniejsza aplikacja jest niezależnym, nieoficjalnym narzędziem i używa nazwy „Valheim" wyłącznie w celu identyfikacji kompatybilności.  
-> Nie rościmy sobie żadnych praw do marki ani logo Valheim.
-
-### 🚫 Atrybucja — Wymagana
-
-> **Usuwanie imienia autora, informacji o twórcy lub odnośnika do niniejszego generatora z jakiegokolwiek forka lub pracy pochodnej jest surowo zabronione.**
->
-> Każdy wygenerowany launcher zawiera stopkę:  
-> *Designed with ❤️ by [cygan](https://www.linkedin.com/in/pszym89/)*
->
-> Ta atrybucja **musi pozostać nienaruszona** we wszystkich forkach, kopiach i pracach pochodnych.  
-> Każdy wygenerowany launcher zawiera również informację, że został utworzony za pomocą:  
-> **[Valheim Launcher Generator](https://github.com/PawelSzymanski89/valheim_launcher_generator)**
-
-### Kontakt komercyjny
-
-Potrzebujesz dedykowanego launchera dla swojego serwera lub społeczności?
-
-📧 **pawel@howtodev.it**  
-🐙 **[github.com/PawelSzymanski89](https://github.com/PawelSzymanski89)**
+Enable the **Launcher** tab in your panel, set the **`PANEL_URL`** repository
+variable (optional: `SERVER_NAME`), push a `v*` tag — GitHub Actions builds on
+Windows and publishes `launcher.zip` + `updater.zip`.
 
 ---
 
-*MIT © 2024–2026 Paweł Szymański*
+Forked from [valheim_launcher_generator](https://github.com/PawelSzymanski89/valheim_launcher_generator) —
+the FTP-era wizard, patcher and crypto remain in the tree only as legacy fallback.
+See [BRANCH.md](BRANCH.md) for the full design rationale.
+
+*Valheim® is a registered trademark of Iron Gate AB. This is an independent,
+unofficial tool.*
