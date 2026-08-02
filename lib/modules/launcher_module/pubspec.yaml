@@ -101,6 +101,7 @@ flutter:
     - assets/manifest.sig
     - assets/doorstop.zip
     - assets/doorstop_unix.zip
+    - assets/version.txt
     - assets/lang/en/translations.json
     - assets/lang/en/flag.png
     - assets/lang/pl/translations.json

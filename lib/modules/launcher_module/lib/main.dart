@@ -2,6 +2,7 @@ import 'dart:io' show Platform, File, Directory;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
@@ -205,6 +206,16 @@ class _LauncherScreenState extends State<LauncherScreen> {
   }
 
   Future<void> _loadPackageInfo() async {
+    // version.txt niesie tag wydania i to jego porównujemy z GitHubem przy
+    // aktualizacji — gracz ma widzieć tę samą liczbę, nie numer z pubspeca,
+    // który stoi w miejscu od dawna.
+    try {
+      final tag = (await rootBundle.loadString('assets/version.txt')).trim();
+      if (tag.isNotEmpty && mounted) {
+        setState(() => _appVersion = tag.startsWith('v') ? tag : 'v$tag');
+        return;
+      }
+    } catch (_) {}
     try {
       final info = await PackageInfo.fromPlatform();
       final version = info.version;
@@ -841,7 +852,9 @@ class _CustomTitleBar extends StatelessWidget {
       height: barHeight,
       child: Row(
         children: [
-          const SizedBox(width: 8),
+          // macOS rysuje swoje przyciski okna w lewym górnym rogu — bez tego
+          // odstępu badge chowa się pod nimi.
+          SizedBox(width: Platform.isMacOS ? 78 : 8),
           // Badge z akronimem nazwy serwera — ta sama grafika, co ikona okna
           BlocBuilder<LauncherCubit, LauncherState>(
             builder: (context, state) {
