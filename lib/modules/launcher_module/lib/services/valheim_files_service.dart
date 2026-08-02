@@ -428,12 +428,14 @@ class ValheimFilesService {
             .convert(utf8.encode(m.files.map((f) => '${f.path}:${f.sha256}').join('\n')))
             .toString()
             .substring(0, 16);
+        // Panel daje ścieżki względem BepInEx/, launcher porównuje względem
+        // roota gry — stąd prefiks. Przy pobieraniu jest zdejmowany z powrotem.
         return RemoteManifest(
           version: version,
           files: [
             for (final f in m.files)
               RemoteFileEntry(
-                relativePath: f.path.replaceAll('/', Platform.pathSeparator),
+                relativePath: 'BepInEx/${f.path}'.replaceAll('/', Platform.pathSeparator),
                 size: f.size,
               )
           ],
@@ -521,8 +523,12 @@ class ValheimFilesService {
           if (rel.startsWith('/')) rel = rel.substring(1);
           final localPath =
               '$localBase${Platform.pathSeparator}${rel.replaceAll('/', Platform.pathSeparator)}';
-          final pf = _panelFiles[rel] ??
-              PanelFile(path: rel, size: item.size ?? 0, sha256: '');
+          // Lokalna ścieżka jest względem roota gry; panel adresuje pliki
+          // względem BepInEx/ — zdejmujemy prefiks nałożony przy manifeście.
+          final panelPath =
+              rel.startsWith('BepInEx/') ? rel.substring('BepInEx/'.length) : rel;
+          final pf = _panelFiles[panelPath] ??
+              PanelFile(path: panelPath, size: item.size ?? 0, sha256: '');
           var ok = false;
           for (var attempt = 1; attempt <= 3 && !ok; attempt++) {
             try {
@@ -1255,7 +1261,11 @@ Map<String, dynamic> _compareRemoteAndLocalTask(_CompareTaskParams params) {
       'bepinex/cache/',
       'bepinex/dumpedassemblies/',
       '.doorstop_version',
-      'doorstop_config.ini.bak',
+      // Doorstop instaluje sam launcher (assets/doorstop.zip, przy każdym
+      // starcie) — sync nie może go kasować, gdy manifest go nie niesie.
+      // Pokrywa też dawne 'doorstop_config.ini.bak' (dopasowanie contains).
+      'doorstop_config.ini',
+      'winhttp.dll',
     ];
     for (final pat in black) {
       if (s.contains(pat.toLowerCase())) return true;
