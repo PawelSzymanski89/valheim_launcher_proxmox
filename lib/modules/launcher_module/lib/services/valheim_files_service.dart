@@ -153,6 +153,33 @@ class ValheimFilesService {
     }
   }
 
+  /// Zdejmuje loader BepInEx-a z katalogu gry. Wołane, gdy serwer nie wysyła
+  /// graczom żadnych modów — wtedy gra ma chodzić czysto, a sam doorstop bez
+  /// BepInEx-a to tylko ładowarka szukająca nieistniejących plików.
+  Future<void> removeDoorstopFromGameRoot(String gameRoot) async {
+    const names = [
+      'winhttp.dll',
+      'doorstop_config.ini',
+      '.doorstop_version',
+      'doorstop_libs',
+      'unstripped_corlib',
+    ];
+    for (final n in names) {
+      final sep = Platform.pathSeparator;
+      try {
+        final f = File('$gameRoot$sep$n');
+        if (await f.exists()) {
+          await f.delete();
+          continue;
+        }
+        final d = Directory('$gameRoot$sep$n');
+        if (await d.exists()) await d.delete(recursive: true);
+      } catch (e) {
+        if (kDebugMode) debugPrint('[ValheimFilesService] Could not remove $n: $e');
+      }
+    }
+  }
+
   /// Returns the first found absolute path to `valheim.exe` among common locations,
   /// or `null` if not found.
   ///

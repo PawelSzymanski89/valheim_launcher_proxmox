@@ -318,6 +318,16 @@ class LauncherCubit extends Cubit<LauncherState> {
       final gameRoot = File(exe).parent.path;
       if (kDebugMode) debugPrint('[LauncherCubit] Using gameRoot: $gameRoot');
 
+      // Loader idzie tylko wtedy, gdy serwer faktycznie wysyła mody. Gdy nie
+      // wysyła nic, zdejmujemy go razem z resztą — inaczej gracz zostaje z
+      // doorstopem szukającym BepInEx-a, którego przed chwilą usunęliśmy.
+      if (remoteList.isNotEmpty) {
+        _emitStatus('extracting_doorstop', isBusy: true, showProgress: false, progressFileName: 'doorstop.zip');
+        await filesService.extractDoorstopToGameRoot(gameRoot);
+      } else {
+        await filesService.removeDoorstopFromGameRoot(gameRoot);
+      }
+
       final localList = await filesService.listLocalModFiles(gameRoot);
 
       if (kDebugMode) {
@@ -877,11 +887,9 @@ class LauncherCubit extends Cubit<LauncherState> {
       // Znaleziono Valheim - zapisz ścieżkę
       _emitStatus('valheim_found', isBusy: true, valheimExePath: path, readyToLaunch: false, progressFileName: '', locateCompleted: true);
 
-      final gameRoot = File(path).parent.path;
-
-      // Krok 4: Wypakuj doorstop.zip do roota gry
-      _emitStatus('extracting_doorstop', isBusy: true, showProgress: false, progressFileName: 'doorstop.zip');
-      await filesService.extractDoorstopToGameRoot(gameRoot);
+      // Doorstop wypakowuje się w syncAndPrepare — dopiero tam wiadomo, czy serwer
+      // w ogóle wysyła mody. Serwer bez modów dla graczy oznacza czystą grę, a
+      // zostawiony loader bez BepInEx to tylko ładowarka w próżnię.
 
       // Krok 5: Automatycznie rozpocznij synchronizację modów
       if (kDebugMode) debugPrint('[LauncherCubit] Starting automatic mod sync...');
