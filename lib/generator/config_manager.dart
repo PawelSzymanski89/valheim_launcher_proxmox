@@ -13,7 +13,9 @@ class GeneratorConfig {
   String serverAddr;        // "192.168.1.100:2456"
   String serverPassword;
 
-  // Step 3: FTP
+  // Step 3: Panel (fork: HTTPS zamiast FTP; pola ftp zostają dla zgodności profili)
+  String panelUrl;         // "https://valheim.klans.eu"
+  String engineRepo;       // "owner/repo"; puste = domyślne repo silnika
   String ftpHost;
   int ftpPort;
   String ftpUser;
@@ -28,6 +30,8 @@ class GeneratorConfig {
     this.backgroundPath = '',
     this.serverAddr = '',
     this.serverPassword = '',
+    this.panelUrl = '',
+    this.engineRepo = '',
     this.ftpHost = '',
     this.ftpPort = 2022,
     this.ftpUser = '',
@@ -38,7 +42,7 @@ class GeneratorConfig {
 
   bool get isStep1Valid => serverName.isNotEmpty;
   bool get isStep2Valid => serverAddr.isNotEmpty;
-  bool get isStep3Valid => ftpHost.isNotEmpty && ftpUser.isNotEmpty && ftpPassword.isNotEmpty;
+  bool get isStep3Valid => panelUrl.trim().startsWith('http');
   bool get isStep4Valid => salt.length >= 30 && saveSalt;
 
   /// Zwraca zaszyfrowany JSON config do wbudowania w launcher/patcher/updater.
@@ -51,6 +55,8 @@ class GeneratorConfig {
       'ftpPort': ftpPort,
       'ftpUser': ftpUser,
       'ftpPassword': ftpPassword,
+      'panelUrl': panelUrl.trim().replaceAll(RegExp(r'/+$'), ''),
+      'engineRepo': engineRepo.trim(),
     });
     return CryptoService.encrypt(plain, salt);
   }
@@ -107,6 +113,8 @@ class GeneratorProvider extends ChangeNotifier {
     config.ftpPort = profile.ftpPort;
     config.ftpUser = profile.ftpUser;
     config.ftpPassword = profile.ftpPassword;
+    config.panelUrl = profile.panelUrl;
+    config.engineRepo = profile.engineRepo;
     config.backgroundPath = profile.backgroundPath;
     if (profile.salt.isNotEmpty) config.salt = profile.salt;
     profileVersion++;

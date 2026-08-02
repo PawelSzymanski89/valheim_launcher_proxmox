@@ -47,7 +47,7 @@ pobiera je ponownie.
 - [x] `panel_client.dart` — manifest, pobieranie plików z weryfikacją `sha256`, różnica wobec stanu lokalnego, tło z pamięcią podręczną
 - [x] `github_engine.dart` — wykrywanie i pobieranie wydania silnika (w obu modułach)
 - [x] `crypto_config.dart` — `panelUrl` i `engineRepo` w konfiguracji, ze zgodnością wstecz
-- [ ] wpięcie `PanelClient` w `valheim_files_service.dart` zamiast `FtpDownloader`
-- [ ] `updater_module` — instalacja z paczki GitHuba zamiast z FTP
-- [ ] generator — pola panelu zamiast FTP w kreatorze
+- [x] wpięcie `PanelClient` w `valheim_files_service.dart` zamiast `FtpDownloader` — tryb panelu włącza się sam, gdy config ma `panelUrl`; ścieżki FTP zostają dla configów z oryginalnego generatora
+- [x] `updater_module` — instalacja z paczki GitHuba zamiast z FTP (release niesie `launcher.zip` i `updater.zip`, wybór po nazwie assetu)
+- [x] generator — krok 3 zbiera adres panelu i repo silnika zamiast konta FTP; test połączenia odpytuje `/api/launcher/manifest` (404 = panel żyje, launcher wyłączony)
 - [ ] build i test na Windowsie (nie da się z macOS)

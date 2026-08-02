@@ -11,6 +11,7 @@ import 'package:ftpconnect/ftpconnect.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:archive/archive.dart';
 import 'crypto_config.dart';
+import 'github_engine.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,6 +92,7 @@ class _UpdaterPageState extends State<UpdaterPage> {
   int _ftpPort = 21;
   String? _ftpUser;
   String? _ftpPass;
+  DecryptedConfig? _cfg;
   String _serverName = 'Updater';
   String _launcherExeName = 'server_launcher.exe';
 
@@ -189,6 +191,7 @@ class _UpdaterPageState extends State<UpdaterPage> {
       throw 'brak konfiguracji ftp'; // No encrypted config found or failed to load/decrypt
     }
 
+    _cfg = cfg;
     _ftpHost = cfg.ftpHost;
     _ftpPort = cfg.ftpPort;
     _ftpUser = cfg.ftpUser;
@@ -199,6 +202,35 @@ class _UpdaterPageState extends State<UpdaterPage> {
   }
 
   Future<void> _downloadLauncher() async {
+    // Tryb panelu: launcher.zip przychodzi z wydania na GitHubie silnika,
+    // nie z FTP admina — jedno wydanie trafia do wszystkich serwerów naraz.
+    final cfg = _cfg;
+    if (cfg != null && cfg.usesPanel) {
+      setState(() => _message = 'pobieranie launchera (github)...');
+      final engine = cfg.engineRepo.trim().isEmpty
+          ? GithubEngine()
+          : GithubEngine(repo: cfg.engineRepo.trim());
+      final tmpFile = File(localZipFile.path + '.downloading');
+      try {
+        final release = await engine.latest(asset: 'launcher');
+        if (release == null) throw 'brak plikow na serwerze';
+        if (await tmpFile.exists()) await tmpFile.delete();
+        final ok = await engine.download(release, tmpFile.path,
+            onProgress: (got, total) {
+          if (total > 0) setState(() => _progress = 0.1 + 0.3 * got / total);
+        });
+        if (!ok) throw 'nie udalo sie pobrac';
+        await tmpFile.rename(localZipFile.path);
+        setState(() => _progress = 0.4);
+        return;
+      } catch (e) {
+        if (await tmpFile.exists()) try { await tmpFile.delete(); } catch (_) {}
+        rethrow;
+      } finally {
+        engine.close();
+      }
+    }
+
     if (_ftpHost == null || _ftpUser == null || _ftpPass == null) {
       throw 'brak konfiguracji ftp';
     }

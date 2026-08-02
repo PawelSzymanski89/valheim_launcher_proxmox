@@ -58,10 +58,12 @@ class PanelClient {
     } finally {
       await sink.close();
     }
-    final got = sha256.convert(await out.readAsBytes()).toString();
-    if (got != file.sha256) {
-      await out.delete();
-      throw Exception('${file.path}: hash mismatch, download discarded');
+    if (file.sha256.isNotEmpty) {
+      final got = sha256.convert(await out.readAsBytes()).toString();
+      if (got != file.sha256) {
+        await out.delete();
+        throw Exception('${file.path}: hash mismatch, download discarded');
+      }
     }
   }
 

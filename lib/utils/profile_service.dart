@@ -13,6 +13,8 @@ class ServerProfile {
   final String backgroundPath;
   final String salt;
   final DateTime savedAt;
+  final String panelUrl;
+  final String engineRepo;
 
   const ServerProfile({
     required this.serverName,
@@ -25,6 +27,8 @@ class ServerProfile {
     required this.backgroundPath,
     required this.salt,
     required this.savedAt,
+    this.panelUrl = '',
+    this.engineRepo = '',
   });
 
   factory ServerProfile.fromJson(Map<String, dynamic> j) => ServerProfile(
@@ -38,6 +42,8 @@ class ServerProfile {
         backgroundPath: j['backgroundPath'] as String? ?? '',
         salt: j['salt'] as String? ?? '',
         savedAt: DateTime.tryParse(j['savedAt'] as String? ?? '') ?? DateTime.now(),
+        panelUrl: j['panelUrl'] as String? ?? '',
+        engineRepo: j['engineRepo'] as String? ?? '',
       );
 
   Map<String, dynamic> toJson() => {
@@ -51,6 +57,8 @@ class ServerProfile {
         'backgroundPath': backgroundPath,
         'salt': salt,
         'savedAt': savedAt.toIso8601String(),
+        'panelUrl': panelUrl,
+        'engineRepo': engineRepo,
       };
 }
 

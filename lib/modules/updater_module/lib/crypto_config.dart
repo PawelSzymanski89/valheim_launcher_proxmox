@@ -65,6 +65,15 @@ class DecryptedConfig {
   final String ftpUser;
   final String ftpPassword;
 
+  /// Panel address, e.g. https://valheim.klans.eu. When set the launcher build
+  /// comes from the engine repo's GitHub releases and the ftp fields are
+  /// ignored - they stay so a config from the upstream generator still loads.
+  final String panelUrl;
+
+  /// Engine repository for updates, owner/name. Empty falls back to the
+  /// fork's own default.
+  final String engineRepo;
+
   const DecryptedConfig({
     required this.serverName,
     required this.serverAddr,
@@ -73,7 +82,12 @@ class DecryptedConfig {
     required this.ftpPort,
     required this.ftpUser,
     required this.ftpPassword,
+    this.panelUrl = '',
+    this.engineRepo = '',
   });
+
+  /// True when this server is served by a panel rather than an FTP account.
+  bool get usesPanel => panelUrl.trim().isNotEmpty;
 
   factory DecryptedConfig.fromJson(Map<String, dynamic> j) => DecryptedConfig(
         serverName: j['serverName'] as String? ?? '',
@@ -83,6 +97,8 @@ class DecryptedConfig {
         ftpPort: (j['ftpPort'] as num?)?.toInt() ?? 21,
         ftpUser: j['ftpUser'] as String? ?? '',
         ftpPassword: j['ftpPassword'] as String? ?? '',
+        panelUrl: j['panelUrl'] as String? ?? '',
+        engineRepo: j['engineRepo'] as String? ?? '',
       );
 }
 

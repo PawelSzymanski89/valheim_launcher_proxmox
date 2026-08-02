@@ -5,6 +5,11 @@ import 'package:http/http.dart' as http;
 
 /// Engine updates come straight from the fork's GitHub releases.
 ///
+/// The launcher only *detects* a newer engine here; installing it is the
+/// updater's job, because a running exe cannot replace itself on Windows. The
+/// launcher hands over and exits, the updater swaps the files and starts it
+/// again - which is why both modules carry this same client.
+///
 /// The upstream design keeps the launcher build on the admin's own FTP, so every
 /// server owner has to re-upload a new engine by hand and anyone who forgets
 /// leaves their players on an old one. A release on the engine repository
@@ -27,7 +32,10 @@ class GithubEngine {
   /// The newest published release, or null when GitHub is unreachable or the
   /// repository has none yet. Never throws: no network must not stop the game
   /// from starting.
-  Future<EngineRelease?> latest() async {
+  ///
+  /// A release carries one zip per module (launcher.zip, updater.zip) - pass
+  /// [asset] to pick the right one; without it the first zip wins.
+  Future<EngineRelease?> latest({String? asset}) async {
     try {
       final r = await _http
           .get(Uri.parse('https://api.github.com/repos/$repo/releases/latest'),
@@ -35,18 +43,22 @@ class GithubEngine {
           .timeout(const Duration(seconds: 12));
       if (r.statusCode != 200) return null;
       final j = json.decode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
-      final assets = (j['assets'] as List?) ?? const [];
-      final asset = assets.cast<Map<String, dynamic>>().firstWhere(
-            (a) => (a['name'] as String? ?? '').toLowerCase().endsWith('.zip'),
-            orElse: () => const {},
-          );
-      if (asset.isEmpty) return null;
+      final zips = ((j['assets'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .where((a) => (a['name'] as String? ?? '').toLowerCase().endsWith('.zip'));
+      final wanted = asset == null
+          ? zips
+          : zips.where((a) =>
+              (a['name'] as String).toLowerCase().contains(asset.toLowerCase()));
+      final found = (wanted.isNotEmpty ? wanted : zips).toList();
+      final Map<String, dynamic> chosen = found.isNotEmpty ? found.first : const {};
+      if (chosen.isEmpty) return null;
       return EngineRelease(
         tag: (j['tag_name'] as String? ?? '').trim(),
         notes: j['body'] as String? ?? '',
-        assetName: asset['name'] as String,
-        assetUrl: asset['browser_download_url'] as String,
-        size: (asset['size'] as num?)?.toInt() ?? 0,
+        assetName: chosen['name'] as String,
+        assetUrl: chosen['browser_download_url'] as String,
+        size: (chosen['size'] as num?)?.toInt() ?? 0,
       );
     } catch (_) {
       return null;

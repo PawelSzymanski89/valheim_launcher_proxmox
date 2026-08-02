@@ -1,10 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:ftpconnect/ftpconnect.dart';
-import 'package:dartssh2/dartssh2.dart';
 import '../config_manager.dart';
 import '../../utils/lang_provider.dart';
 
+/// Fork: krok 3 zbiera adres panelu zamiast konta FTP.
+/// Launcher rozmawia z panelem po HTTPS, a aktualizacje silnika idą z GitHuba,
+/// więc jedyne, co trzeba zapiec w binarkę, to te dwa adresy.
 class Step3Ftp extends StatefulWidget {
   const Step3Ftp({super.key});
   @override
@@ -12,11 +16,8 @@ class Step3Ftp extends StatefulWidget {
 }
 
 class _Step3FtpState extends State<Step3Ftp> {
-  late TextEditingController _hostCtrl;
-  late TextEditingController _portCtrl;
-  late TextEditingController _userCtrl;
-  late TextEditingController _passCtrl;
-  bool _obscurePass = true;
+  late TextEditingController _panelCtrl;
+  late TextEditingController _repoCtrl;
   bool _testing = false;
   String? _testResult;
   bool _testOk = false;
@@ -25,44 +26,37 @@ class _Step3FtpState extends State<Step3Ftp> {
   void initState() {
     super.initState();
     final cfg = context.read<GeneratorProvider>().config;
-    _hostCtrl = TextEditingController(text: cfg.ftpHost);
-    _portCtrl = TextEditingController(text: cfg.ftpPort.toString());
-    _userCtrl = TextEditingController(text: cfg.ftpUser);
-    _passCtrl = TextEditingController(text: cfg.ftpPassword);
+    _panelCtrl = TextEditingController(text: cfg.panelUrl);
+    _repoCtrl = TextEditingController(text: cfg.engineRepo);
   }
 
   @override
   void dispose() {
-    _hostCtrl.dispose();
-    _portCtrl.dispose();
-    _userCtrl.dispose();
-    _passCtrl.dispose();
+    _panelCtrl.dispose();
+    _repoCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _testConnection() async {
-    final cfg = context.read<GeneratorProvider>().config;
+    final url = _panelCtrl.text.trim().replaceAll(RegExp(r'/+$'), '');
     setState(() { _testing = true; _testResult = null; });
     try {
-      final port = int.tryParse(_portCtrl.text) ?? 2022;
-      final isSftp = port == 22 || port == 2022;
-
-      if (isSftp) {
-        final socket = await SSHSocket.connect(cfg.ftpHost, port,
-            timeout: const Duration(seconds: 10));
-        final client = SSHClient(socket,
-            username: cfg.ftpUser,
-            onPasswordRequest: () => cfg.ftpPassword);
-        await client.authenticated;
+      final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+      try {
+        final req = await client.getUrl(Uri.parse('$url/api/launcher/manifest'));
+        final resp = await req.close();
+        if (resp.statusCode == 200) {
+          final body = await resp.transform(utf8.decoder).join();
+          final files = ((json.decode(body) as Map<String, dynamic>)['files'] as List?)?.length ?? 0;
+          setState(() { _testOk = true; _testResult = '✓ OK ($files ${_plFiles(files)})'; });
+        } else if (resp.statusCode == 404) {
+          // Panel odpowiada, launcher tylko wyłączony w zakładce — to nie błąd.
+          setState(() { _testOk = true; _testResult = '✓ 404 (launcher off)'; });
+        } else {
+          setState(() { _testOk = false; _testResult = '✗ HTTP ${resp.statusCode}'; });
+        }
+      } finally {
         client.close();
-        setState(() { _testOk = true; _testResult = '✓ SFTP OK (port $port)'; });
-      } else {
-        final ftp = FTPConnect(cfg.ftpHost,
-            port: port, user: cfg.ftpUser, pass: cfg.ftpPassword,
-            timeout: 10);
-        await ftp.connect();
-        await ftp.disconnect();
-        setState(() { _testOk = true; _testResult = '✓ FTP OK (port $port)'; });
       }
     } catch (e) {
       setState(() { _testOk = false; _testResult = '✗ $e'; });
@@ -71,6 +65,8 @@ class _Step3FtpState extends State<Step3Ftp> {
     }
   }
 
+  String _plFiles(int n) => n == 1 ? 'file' : 'files';
+
   @override
   Widget build(BuildContext context) {
     final prov = context.watch<GeneratorProvider>();
@@ -78,46 +74,20 @@ class _Step3FtpState extends State<Step3Ftp> {
     final cfg = prov.config;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _label(lang.t('ftp_host')),
-          const SizedBox(height: 8),
-          _field(_hostCtrl, lang.t('ftp_host_hint'), (v) { cfg.ftpHost = v; prov.notify(); }),
-        ])),
-        const SizedBox(width: 16),
-        SizedBox(width: 100, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _label(lang.t('ftp_port')),
-          const SizedBox(height: 8),
-          _field(_portCtrl, '2022', (v) {
-            cfg.ftpPort = int.tryParse(v) ?? 2022;
-            prov.notify();
-          }, keyboardType: TextInputType.number),
-        ])),
-      ]),
-      const SizedBox(height: 16),
-      _label(lang.t('ftp_user')),
+      _label(lang.t('panel_url')),
       const SizedBox(height: 8),
-      _field(_userCtrl, lang.t('ftp_user_hint'), (v) { cfg.ftpUser = v; prov.notify(); }),
+      _field(_panelCtrl, lang.t('panel_url_hint'), (v) { cfg.panelUrl = v; prov.notify(); }),
       const SizedBox(height: 16),
-      _label(lang.t('ftp_pass')),
+      _label(lang.t('engine_repo')),
       const SizedBox(height: 8),
-      TextField(
-        controller: _passCtrl,
-        obscureText: _obscurePass,
-        onChanged: (v) { cfg.ftpPassword = v; prov.notify(); },
-        style: const TextStyle(color: Colors.white),
-        decoration: _deco(lang.t('ftp_pass_hint')).copyWith(
-          suffixIcon: IconButton(
-            icon: Icon(_obscurePass ? Icons.visibility : Icons.visibility_off,
-                color: Colors.white38, size: 20),
-            onPressed: () => setState(() => _obscurePass = !_obscurePass),
-          ),
-        ),
-      ),
+      _field(_repoCtrl, lang.t('engine_repo_hint'), (v) { cfg.engineRepo = v; prov.notify(); }),
+      const SizedBox(height: 8),
+      Text(lang.t('engine_repo_note'),
+          style: const TextStyle(color: Colors.white38, fontSize: 12)),
       const SizedBox(height: 20),
       Row(children: [
         ElevatedButton.icon(
-          onPressed: _testing ? null : _testConnection,
+          onPressed: _testing || !cfg.isStep3Valid ? null : _testConnection,
           icon: _testing
               ? const SizedBox(width: 16, height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -131,12 +101,12 @@ class _Step3FtpState extends State<Step3Ftp> {
         ),
         if (_testResult != null) ...[
           const SizedBox(width: 14),
-          Text(_testResult!,
+          Flexible(child: Text(_testResult!,
               style: TextStyle(
                 color: _testOk ? Colors.greenAccent.shade400 : Colors.redAccent,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-              )),
+              ))),
         ],
       ]),
     ]);
@@ -155,12 +125,10 @@ class _Step3FtpState extends State<Step3Ftp> {
     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.blueAccent.shade400)),
   );
 
-  Widget _field(TextEditingController ctrl, String hint, void Function(String) onChange,
-      {TextInputType? keyboardType}) =>
+  Widget _field(TextEditingController ctrl, String hint, void Function(String) onChange) =>
     TextField(
       controller: ctrl,
       onChanged: onChange,
-      keyboardType: keyboardType,
       style: const TextStyle(color: Colors.white),
       decoration: _deco(hint),
     );

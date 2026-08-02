@@ -903,7 +903,7 @@ class _ProfileDialogState extends State<_ProfileDialog> {
                             fontFamily: 'Norse', color: Color(0xFFD4A017), fontSize: 15,
                           )),
                           subtitle: Text(
-                            '${p.ftpHost}:${p.ftpPort}  ·  ${p.serverAddr}',
+                            '${p.panelUrl.isNotEmpty ? p.panelUrl : '${p.ftpHost}:${p.ftpPort}'}  ·  ${p.serverAddr}',
                             style: const TextStyle(color: Colors.white38, fontSize: 11, fontFamily: 'Norse'),
                           ),
                           trailing: Row(mainAxisSize: MainAxisSize.min, children: [

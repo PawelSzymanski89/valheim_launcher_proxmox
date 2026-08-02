@@ -449,6 +449,8 @@ class BuildService {
         backgroundPath: config.backgroundPath,
         salt: config.salt,
         savedAt: DateTime.now(),
+        panelUrl: config.panelUrl,
+        engineRepo: config.engineRepo,
       ));
     } catch (e) {
       onLog('  ⚠️ Nie udało się zapisać profilu: $e');

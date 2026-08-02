@@ -2,12 +2,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:crypto/crypto.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:archive/archive_io.dart';
 import 'package:server_launcher/services/i18n_service.dart';
 import 'package:server_launcher/services/ftp_downloader.dart';
 import 'package:server_launcher/services/crypto_config.dart';
+import 'package:server_launcher/services/github_engine.dart';
+import 'package:server_launcher/services/panel_client.dart';
 import 'package:server_launcher/services/valheim_server_service.dart';
 import 'package:path/path.dart' as p;
 
@@ -94,6 +97,14 @@ class LocalFileEntry {
 /// common Steam installation locations. This is a best-effort heuristic; users
 /// with custom Steam libraries may have the game elsewhere.
 class ValheimFilesService {
+  /// Panel mode: files from the last manifest fetch, keyed by forward-slash
+  /// relative path, so downloads can verify the sha256 the manifest promised.
+  Map<String, PanelFile> _panelFiles = {};
+
+  GithubEngine _engine(DecryptedConfig cfg) => cfg.engineRepo.trim().isEmpty
+      ? GithubEngine()
+      : GithubEngine(repo: cfg.engineRepo.trim());
+
   // Helper to compare sizes with absolute and relative tolerances.
   bool _sizeMatchesInternal(int? remoteSize, int localSize, int sizeTolerance) {
     if (remoteSize == null) return true;
@@ -288,6 +299,29 @@ class ValheimFilesService {
   /// Tworzy jednokrotny backup (nadpisywany) o nazwie `mods_list.json.bak` jeśli plik już istnieje.
   /// Zwraca absolutną ścieżkę do zapisanego pliku.
   Future<String> downloadModsListFromFtp(String remotePath) async {
+    // Tryb panelu: manifest przychodzi po HTTPS, zapisujemy go w tym samym
+    // miejscu i formacie ('files': [{path,size,sha256}]), reszta łańcucha bez zmian.
+    final panelCfg = await loadDecryptedConfig();
+    if (panelCfg != null && panelCfg.usesPanel) {
+      final exe = await findValheimExecutable();
+      if (exe == null) throw Exception('Nie znaleziono Valheim.exe.');
+      final target = File('${File(exe).parent.path}${Platform.pathSeparator}mods_list.json');
+      final client = PanelClient(panelCfg.panelUrl);
+      try {
+        final m = await client.manifest();
+        _panelFiles = {for (final f in m.files) f.path: f};
+        await target.writeAsString(json.encode({
+          'files': [
+            for (final f in m.files)
+              {'path': f.path, 'size': f.size, 'sha256': f.sha256}
+          ]
+        }));
+        return target.path;
+      } finally {
+        client.close();
+      }
+    }
+
     // Wyciągnij nazwę pliku
     final remoteParts = remotePath.split(RegExp(r'[\\/]+'));
     final targetBaseName = remoteParts.isNotEmpty ? remoteParts.last : remotePath;
@@ -383,6 +417,32 @@ class ValheimFilesService {
     final decrypted = await loadDecryptedConfig();
     if (decrypted == null) throw Exception('Nie można wczytać zaszyfrowanej konfiguracji FTP.');
 
+    if (decrypted.usesPanel) {
+      final client = PanelClient(decrypted.panelUrl);
+      try {
+        final m = await client.manifest();
+        _panelFiles = {for (final f in m.files) f.path: f};
+        // Wersja = odcisk listy plików: zmienia się dokładnie wtedy, gdy
+        // zmieniają się mody, więc cubit pomija sync przy braku zmian.
+        final version = sha256
+            .convert(utf8.encode(m.files.map((f) => '${f.path}:${f.sha256}').join('\n')))
+            .toString()
+            .substring(0, 16);
+        return RemoteManifest(
+          version: version,
+          files: [
+            for (final f in m.files)
+              RemoteFileEntry(
+                relativePath: f.path.replaceAll('/', Platform.pathSeparator),
+                size: f.size,
+              )
+          ],
+        );
+      } finally {
+        client.close();
+      }
+    }
+
     final downloader = FtpDownloader(decrypted.toFtpConfig());
 
     final tmp = Directory.systemTemp.createTempSync('mods_manifest_');
@@ -449,6 +509,47 @@ class ValheimFilesService {
     if (entries.isEmpty) return;
     final decrypted = await loadDecryptedConfig();
     if (decrypted == null) throw Exception('Nie można wczytać zaszyfrowanej konfiguracji FTP.');
+
+    if (decrypted.usesPanel) {
+      // ponytail: pobieranie sekwencyjne — manifest to ~2 MB po HTTPS/2,
+      // pula workerów wróci, jeśli mody kiedyś urosną o rząd wielkości.
+      final client = PanelClient(decrypted.panelUrl);
+      var completed = 0;
+      try {
+        for (final item in entries) {
+          var rel = item.relativePath.replaceAll('\\', '/');
+          if (rel.startsWith('/')) rel = rel.substring(1);
+          final localPath =
+              '$localBase${Platform.pathSeparator}${rel.replaceAll('/', Platform.pathSeparator)}';
+          final pf = _panelFiles[rel] ??
+              PanelFile(path: rel, size: item.size ?? 0, sha256: '');
+          var ok = false;
+          for (var attempt = 1; attempt <= 3 && !ok; attempt++) {
+            try {
+              await client.downloadFile(pf, localPath);
+              ok = true;
+            } catch (e) {
+              if (kDebugMode) debugPrint('[ValheimFilesService] Panel attempt $attempt ERROR $rel: $e');
+              if (attempt < 3) await Future.delayed(const Duration(milliseconds: 300));
+            }
+          }
+          if (ok) {
+            completed++;
+          } else {
+            try {
+              final f = File(localPath);
+              if (await f.exists()) await f.delete();
+            } catch (_) {}
+          }
+          onProgress(completed, entries.length, '/$rel', ok, item);
+          await Future.delayed(const Duration(milliseconds: 1));
+        }
+      } finally {
+        client.close();
+      }
+      return;
+    }
+
     final ftpCfg = decrypted.toFtpConfig();
 
     // Stała pula połączeń - zawsze maksimum dla szybkości pobierania
@@ -636,6 +737,11 @@ class ValheimFilesService {
 
       final decrypted = await loadDecryptedConfig();
       if (decrypted == null) throw Exception(I18n.instance.t('ftp_invalid_config'));
+
+      if (decrypted.usesPanel) {
+        return _panelCheckAndRunUpdater(decrypted, onProgress: onProgress);
+      }
+
       final ftpCfg = decrypted.toFtpConfig();
 
       if (kDebugMode) debugPrint('[Updater] Wczytano zaszyfrowany config: ${ftpCfg.host}');
@@ -828,6 +934,12 @@ class ValheimFilesService {
 
       final decrypted = await loadDecryptedConfig();
       if (decrypted == null) throw Exception(I18n.instance.t('ftp_invalid_config'));
+
+      if (decrypted.usesPanel) {
+        return _panelCheckAndRunLauncherUpdate(decrypted,
+            onProgress: onProgress, currentVersion: currentVersion);
+      }
+
       final ftpCfg = decrypted.toFtpConfig();
 
       if (kDebugMode) debugPrint('[LauncherUpdate] Wczytano zaszyfrowany config: ${ftpCfg.host}');
@@ -979,6 +1091,143 @@ class ValheimFilesService {
       if (kDebugMode) debugPrint('[LauncherUpdate] Unhandled error: $ex');
       onProgress(0.0, I18n.instance.t('version_check_error', {'error': '$ex'}));
       return false;
+    }
+  }
+
+  // ─── PANEL MODE ───────────────────────────────────────────────────────────
+  // Updates come from the engine repository's GitHub releases instead of the
+  // admin's FTP. The handover flow is unchanged: the launcher only detects and
+  // starts the updater; the updater installs, because Windows cannot replace a
+  // running exe.
+
+  String get _appRoot {
+    try {
+      return File(Platform.resolvedExecutable).parent.path;
+    } catch (_) {
+      final appData = Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
+      return '$appData${Platform.pathSeparator}schron_twarda_launcher';
+    }
+  }
+
+  File? _findUpdaterExe(String appRoot) {
+    final dir = Directory('$appRoot${Platform.pathSeparator}updater');
+    if (!dir.existsSync()) return null;
+    final exes = dir
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.toLowerCase().endsWith('.exe'))
+        .toList();
+    if (exes.isEmpty) return null;
+    for (final f in exes) {
+      final name = p.basename(f.path).toLowerCase();
+      if (name.contains('update') || name.contains('patcher')) return f;
+    }
+    return exes.first;
+  }
+
+  /// Keeps `<appRoot>/updater` current with the engine repo's updater.zip.
+  Future<bool> _panelCheckAndRunUpdater(DecryptedConfig cfg,
+      {required void Function(double progress, String status) onProgress}) async {
+    final engine = _engine(cfg);
+    try {
+      final release = await engine.latest(asset: 'updater');
+      if (release == null) {
+        // Brak sieci/wydania nie może zatrzymać startu gry.
+        onProgress(1.0, I18n.instance.t('updater_up_to_date'));
+        return false;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final localVersion = prefs.getString('updater_version');
+      final destDir = Directory('$_appRoot${Platform.pathSeparator}updater');
+      final hasExe = _findUpdaterExe(_appRoot) != null;
+
+      if (localVersion == release.tag && hasExe) {
+        onProgress(1.0, I18n.instance.t('updater_up_to_date'));
+        return false;
+      }
+
+      onProgress(0.05, I18n.instance.t('downloading_updater'));
+      final tmp = Directory.systemTemp.createTempSync('updater_gh_');
+      final tmpZip = File('${tmp.path}${Platform.pathSeparator}updater.zip');
+      try {
+        final got = await engine.download(release, tmpZip.path);
+        if (!got) {
+          onProgress(0.0, I18n.instance.t('updater_download_error'));
+          return false;
+        }
+
+        onProgress(0.6, I18n.instance.t('unpacking_updater'));
+        final unpack = Directory('${tmp.path}${Platform.pathSeparator}unpack');
+        await unpack.create(recursive: true);
+        final archive = ZipDecoder().decodeBytes(await tmpZip.readAsBytes());
+        for (final f in archive) {
+          final outPath =
+              '${unpack.path}${Platform.pathSeparator}${f.name.replaceAll('/', Platform.pathSeparator)}';
+          if (f.isFile) {
+            final out = File(outPath);
+            await out.parent.create(recursive: true);
+            await out.writeAsBytes(f.content as List<int>);
+          } else {
+            await Directory(outPath).create(recursive: true);
+          }
+        }
+        if (await destDir.exists()) {
+          try { await destDir.delete(recursive: true); } catch (_) {}
+        }
+        await unpack.rename(destDir.path);
+
+        await prefs.setString('updater_version', release.tag);
+        onProgress(1.0, I18n.instance.t('updater_updated'));
+        return true;
+      } finally {
+        try { if (tmp.existsSync()) tmp.deleteSync(recursive: true); } catch (_) {}
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Updater][panel] Error: $e');
+      onProgress(0.0, I18n.instance.t('updater_error', {'error': '$e'}));
+      return false;
+    } finally {
+      engine.close();
+    }
+  }
+
+  /// Detects a newer launcher release and hands over to the updater.
+  /// Returns true when the updater was started and the launcher must exit.
+  Future<bool> _panelCheckAndRunLauncherUpdate(DecryptedConfig cfg,
+      {required void Function(double progress, String status) onProgress,
+      required String currentVersion}) async {
+    final engine = _engine(cfg);
+    try {
+      final release = await engine.latest(asset: 'launcher');
+      if (release == null || !release.isNewerThan(currentVersion)) {
+        onProgress(1.0, I18n.instance.t('launcher_up_to_date'));
+        return false;
+      }
+
+      if (kDebugMode) {
+        debugPrint('[LauncherUpdate][panel] ${release.tag} > $currentVersion, starting updater');
+      }
+      onProgress(0.5, I18n.instance.t('new_launcher_version'));
+
+      final updaterExe = _findUpdaterExe(_appRoot);
+      if (updaterExe == null) {
+        onProgress(0.0, I18n.instance.t('updater_missing'));
+        return false;
+      }
+
+      onProgress(0.8, I18n.instance.t('launching_updater'));
+      await Process.start(updaterExe.path, [],
+          workingDirectory: updaterExe.parent.path,
+          mode: ProcessStartMode.detached);
+      onProgress(1.0, I18n.instance.t('updater_launched'));
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[LauncherUpdate][panel] Error: $e');
+      onProgress(0.0, I18n.instance.t('version_check_error', {'error': '$e'}));
+      return false;
+    } finally {
+      engine.close();
     }
   }
 }
