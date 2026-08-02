@@ -158,6 +158,7 @@ class _UpdaterPageState extends State<UpdaterPage> {
           await launcherConfigFile().writeAsString(savedConfig);
         } catch (_) {}
       }
+      await _renameToServerName();
 
       setState(() {
         _message = 'uruchamianie...';
@@ -345,6 +346,21 @@ class _UpdaterPageState extends State<UpdaterPage> {
     }
 
     setState(() => _progress = 0.9);
+  }
+
+  /// The engine on GitHub ships as `server_launcher.exe`, but the panel hands the
+  /// player a build named after the server. Without this the update would drop the
+  /// neutral name next to the old one and we would start yesterday's binary.
+  Future<void> _renameToServerName() async {
+    try {
+      final wanted = _launcherExeName;
+      if (wanted.isEmpty || wanted == 'server_launcher.exe') return;
+      final fresh = File(p.join(parentDir.path, 'server_launcher.exe'));
+      if (!await fresh.exists()) return;
+      final target = File(p.join(parentDir.path, wanted));
+      if (await target.exists()) await target.delete();
+      await fresh.rename(target.path);
+    } catch (_) {}
   }
 
   Future<void> _launchLauncherExe() async {

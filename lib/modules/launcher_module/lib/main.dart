@@ -14,6 +14,7 @@ import 'package:server_launcher/widgets/valheim_server_status.dart';
 import 'package:server_launcher/bloc/launcher_cubit.dart';
 import 'package:server_launcher/services/crypto_config.dart' as cc;
 import 'package:server_launcher/services/panel_client.dart';
+import 'package:server_launcher/services/server_icon.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 Future<void> main() async {
@@ -85,6 +86,7 @@ class _LauncherScreenState extends State<LauncherScreen> {
   late final VideoController _videoController;
   bool _videoReady = false;
   String? _bgImagePath; // panel background when it is a still image
+  String? _iconAppliedFor; // server name the window icon was drawn from
   bool _pickerShown = false; // czy już pokazano dialog wyboru exe w tej sesji
 
   // Tap recognizer for the footer link
@@ -546,7 +548,15 @@ class _LauncherScreenState extends State<LauncherScreen> {
                              children: [
                                 BlocBuilder<LauncherCubit, LauncherState>(
                                   builder: (context, state) {
-                                    final title = state.launcherConfig?.serverName ?? I18n.instance.t('app_title');
+                                    final name = state.launcherConfig?.serverName ?? '';
+                                    final title = name.isNotEmpty ? name : I18n.instance.t('app_title');
+                                    // Ikona okna rysuje się z nazwy serwera, a nazwa
+                                    // przychodzi z panelu przy starcie — stąd tutaj,
+                                    // nie w buildzie.
+                                    if (name.isNotEmpty && name != _iconAppliedFor) {
+                                      _iconAppliedFor = name;
+                                      ServerIcon.apply(name);
+                                    }
                                     return Text(
                                       title,
                                       textAlign: TextAlign.center,
@@ -832,6 +842,17 @@ class _CustomTitleBar extends StatelessWidget {
       child: Row(
         children: [
           const SizedBox(width: 8),
+          // Badge z akronimem nazwy serwera — ta sama grafika, co ikona okna
+          BlocBuilder<LauncherCubit, LauncherState>(
+            builder: (context, state) {
+              final name = state.launcherConfig?.serverName ?? '';
+              if (name.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ServerIconBadge(serverName: name),
+              );
+            },
+          ),
           // Server status widget on the left
           const ValheimServerStatus(),
           const SizedBox(width: 8),
