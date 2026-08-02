@@ -540,44 +540,55 @@ class ValheimFilesService {
     if (decrypted == null) throw Exception('Nie można wczytać zaszyfrowanej konfiguracji FTP.');
 
     if (decrypted.usesPanel) {
-      // ponytail: pobieranie sekwencyjne — manifest to ~2 MB po HTTPS/2,
-      // pula workerów wróci, jeśli mody kiedyś urosną o rząd wielkości.
+      // Sześć równoległych pobrań na jednym kliencie http — duży pack to setki
+      // plików, a każdy z osobna czekałby całe RTT do panelu. Sześć, bo powyżej
+      // wąskim gardłem staje się łącze, a nie liczba połączeń.
+      const pool = 6;
       final client = PanelClient(decrypted.panelUrl);
       var completed = 0;
+      var next = 0;
       try {
-        for (final item in entries) {
-          var rel = item.relativePath.replaceAll('\\', '/');
-          if (rel.startsWith('/')) rel = rel.substring(1);
-          final localPath =
-              '$localBase${Platform.pathSeparator}${rel.replaceAll('/', Platform.pathSeparator)}';
-          // Lokalna ścieżka jest względem roota gry; panel adresuje pliki
-          // względem BepInEx/ — zdejmujemy prefiks nałożony przy manifeście.
-          final panelPath =
-              rel.startsWith('BepInEx/') ? rel.substring('BepInEx/'.length) : rel;
-          final pf = _panelFiles[panelPath] ??
-              PanelFile(path: panelPath, size: item.size ?? 0, sha256: '');
-          var ok = false;
-          for (var attempt = 1; attempt <= 3 && !ok; attempt++) {
-            try {
-              await client.downloadFile(pf, localPath);
-              ok = true;
-            } catch (e) {
-              if (kDebugMode) debugPrint('[ValheimFilesService] Panel attempt $attempt ERROR $rel: $e');
-              if (attempt < 3) await Future.delayed(const Duration(milliseconds: 300));
+        Future<void> worker() async {
+          while (true) {
+            if (next >= entries.length) return;
+            final item = entries[next++];
+            var rel = item.relativePath.replaceAll('\\', '/');
+            if (rel.startsWith('/')) rel = rel.substring(1);
+            final localPath =
+                '$localBase${Platform.pathSeparator}${rel.replaceAll('/', Platform.pathSeparator)}';
+            // Lokalna ścieżka jest względem roota gry; panel adresuje pliki
+            // względem BepInEx/ — zdejmujemy prefiks nałożony przy manifeście.
+            final panelPath =
+                rel.startsWith('BepInEx/') ? rel.substring('BepInEx/'.length) : rel;
+            final pf = _panelFiles[panelPath] ??
+                PanelFile(path: panelPath, size: item.size ?? 0, sha256: '');
+            var ok = false;
+            for (var attempt = 1; attempt <= 3 && !ok; attempt++) {
+              try {
+                await client.downloadFile(pf, localPath);
+                ok = true;
+              } catch (e) {
+                if (kDebugMode) debugPrint('[ValheimFilesService] Panel attempt $attempt ERROR $rel: $e');
+                if (attempt < 3) await Future.delayed(const Duration(milliseconds: 300));
+              }
             }
+            if (ok) {
+              completed++;
+            } else {
+              try {
+                final f = File(localPath);
+                if (await f.exists()) await f.delete();
+              } catch (_) {}
+            }
+            onProgress(completed, entries.length, '/$rel', ok, item);
+            await Future.delayed(const Duration(milliseconds: 1));
           }
-          if (ok) {
-            completed++;
-          } else {
-            try {
-              final f = File(localPath);
-              if (await f.exists()) await f.delete();
-            } catch (_) {}
-          }
-          onProgress(completed, entries.length, '/$rel', ok, item);
-          await Future.delayed(const Duration(milliseconds: 1));
         }
+
+        onPoolInfo?.call(pool, pool);
+        await Future.wait([for (var i = 0; i < pool; i++) worker()]);
       } finally {
+        onPoolInfo?.call(0, 0);
         client.close();
       }
       return;
