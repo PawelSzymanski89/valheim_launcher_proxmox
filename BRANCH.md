@@ -30,6 +30,14 @@ Przepływ aktualizacji zostaje taki jak w oryginale, bo Windows nie pozwala
 podmienić działającego pliku: **launcher wykrywa nowszą wersję → uruchamia updater
 → kończy się → updater podmienia pliki i uruchamia launcher z powrotem.**
 
+**Adres serwera przychodzi z manifestu, nie z buildu.** To jedyna rzecz, której
+launcher nie wyliczy sam, i jedyna, która się zmienia: na łączu domowym numer IP
+wędruje, DDNS za nim nadąża, a adres wkompilowany w plik wykonywalny jest zły
+następnego ranka. Dlatego **w launcherze zapieczony jest wyłącznie adres panelu**
+(nazwa domenowa), a nazwa serwera gry, port, wymóg hasła, lista modów i tło
+przychodzą przy każdym starcie. Admin zmienia adres w panelu i zmiana dociera do
+wszystkich graczy bez przebudowywania czegokolwiek.
+
 **Tło** pobiera się raz i jest trzymane lokalnie. Panel podaje przy nim znacznik
 czasu, który zmienia się wyłącznie przy podmianie pliku — dopiero wtedy launcher
 pobiera je ponownie.

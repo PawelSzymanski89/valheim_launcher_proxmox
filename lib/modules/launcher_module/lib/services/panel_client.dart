@@ -83,6 +83,11 @@ class PanelClient {
     return true;
   }
 
+  /// The address to join, with the panel's own host as the fallback: if the
+  /// admin has not named the game server, the panel is reachable at some name
+  /// already and the game almost always answers on the same one.
+  String joinHost(PanelManifest m) => m.serverAddress ?? Uri.parse(baseUrl).host;
+
   void close() => _http.close();
 }
 
@@ -108,6 +113,12 @@ class PanelFile {
 
 class PanelManifest {
   final String serverName;
+
+  /// Where players connect. Comes from the panel at every start rather than
+  /// being baked in, because a home connection changes address and DDNS follows
+  /// it - a number compiled into an exe is wrong by morning. Null means the
+  /// admin has not set one, and the launcher falls back to the panel's own host.
+  final String? serverAddress;
   final int serverPort;
   final bool passwordRequired;
   final bool crossplay;
@@ -121,6 +132,7 @@ class PanelManifest {
   const PanelManifest({
     required this.serverName,
     required this.serverPort,
+    this.serverAddress,
     required this.passwordRequired,
     required this.crossplay,
     required this.files,
@@ -136,6 +148,9 @@ class PanelManifest {
     final engine = (j['engine'] as Map<String, dynamic>?) ?? const {};
     return PanelManifest(
       serverName: server['name'] as String? ?? '',
+      serverAddress: (server['address'] as String?)?.trim().isEmpty == true
+          ? null
+          : server['address'] as String?,
       serverPort: (server['port'] as num?)?.toInt() ?? 2456,
       passwordRequired: server['password_required'] == true,
       crossplay: server['crossplay'] == true,
