@@ -1,4 +1,4 @@
-import 'dart:io' show Platform, File;
+import 'dart:io' show Platform, File, Directory;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +12,8 @@ import 'package:server_launcher/services/i18n_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:server_launcher/widgets/valheim_server_status.dart';
 import 'package:server_launcher/bloc/launcher_cubit.dart';
+import 'package:server_launcher/services/crypto_config.dart' as cc;
+import 'package:server_launcher/services/panel_client.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 Future<void> main() async {
@@ -82,17 +84,27 @@ class _LauncherScreenState extends State<LauncherScreen> {
   late final Player _player; // video player (muted)
   late final VideoController _videoController;
   bool _videoReady = false;
+  String? _bgImagePath; // panel background when it is a still image
   bool _pickerShown = false; // czy już pokazano dialog wyboru exe w tej sesji
 
   // Tap recognizer for the footer link
   final TapGestureRecognizer _linkRecognizer = TapGestureRecognizer();
 
-  Future<void> _openLinkedIn() async {
-    final uri = Uri.parse('https://www.linkedin.com/in/pszym89/');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      debugPrint('Could not launch LinkedIn profile: $uri');
-    }
-  }
+  static const TextStyle _footerStyle = TextStyle(
+    color: Colors.white54,
+    fontSize: 13,
+    fontFamily: 'Norse',
+  );
+
+  Widget _footerLink(String text, String url) => MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () => launchUrl(Uri.parse(url),
+              mode: LaunchMode.externalApplication),
+          child: Text(text,
+              style: _footerStyle.copyWith(color: const Color(0xFF64B5F6))),
+        ),
+      );
 
   void _showAboutDialog(BuildContext context) {
     showDialog(
@@ -229,9 +241,27 @@ class _LauncherScreenState extends State<LauncherScreen> {
       await _player.setVolume(0.0);
       await _player.setPlaylistMode(PlaylistMode.loop);
 
-      // Play background.mp4 injected by generator; fallback to smok.mp4
+      // Tło z panelu ma pierwszeństwo (obraz albo mp4, cache lokalny).
+      // Bez panelu gra lekki wbudowany smok.mp4 — ciężki 97 MB default
+      // klatkował i pompował paczkę, więc wyleciał z repo.
+      final panelBg = await _syncPanelBackground();
+      if (panelBg != null && _looksLikeImage(panelBg)) {
+        setState(() {
+          _bgImagePath = panelBg;
+          _videoReady = false;
+        });
+        if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+          try {
+            await windowManager.show();
+            await windowManager.focus();
+          } catch (_) {}
+        }
+        return;
+      }
       await _player.open(
-        Media('asset:///assets/video/background.mp4'),
+        panelBg != null
+            ? Media(panelBg)
+            : Media('asset:///assets/video/smok.mp4'),
         play: true,
       );
       if (kDebugMode) debugPrint('[Video] Video player started (muted)');
@@ -248,11 +278,10 @@ class _LauncherScreenState extends State<LauncherScreen> {
         } catch (_) {}
       }
     } catch (e) {
-      // If background.mp4 not found, try fallback smok.mp4
       try {
         _player.open(Media('asset:///assets/video/smok.mp4'), play: true);
       } catch (_) {}
-      debugPrint('[Video] background.mp4 not found, using smok.mp4 fallback: $e');
+      debugPrint('[Video] falling back to bundled smok.mp4: $e');
       if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
         try {
           await windowManager.show();
@@ -260,6 +289,47 @@ class _LauncherScreenState extends State<LauncherScreen> {
         } catch (_) {}
       }
       setState(() => _videoReady = true);
+    }
+  }
+
+  /// Pobiera tło ustawione w panelu (obraz lub mp4) do lokalnego cache.
+  /// Wraca ścieżką pliku albo null, gdy panelu/tła nie ma — bez sieci
+  /// launcher po prostu gra wbudowane wideo.
+  Future<String?> _syncPanelBackground() async {
+    try {
+      final decrypted = await cc.loadDecryptedConfig();
+      if (decrypted == null || !decrypted.usesPanel) return null;
+      final client = PanelClient(decrypted.panelUrl);
+      try {
+        final m = await client.manifest().timeout(const Duration(seconds: 6));
+        final url = m.backgroundUrl;
+        if (url == null || url.isEmpty) return null;
+        final appData =
+            Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
+        final sep = Platform.pathSeparator;
+        final dir = '$appData${sep}schron_twarda_launcher';
+        await Directory(dir).create(recursive: true);
+        final target = '$dir${sep}panel_background';
+        await client.syncBackground(url, target, '$target.stamp', url);
+        final f = File(target);
+        return await f.exists() ? f.path : null;
+      } finally {
+        client.close();
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _looksLikeImage(String path) {
+    try {
+      final raf = File(path).openSync();
+      final head = raf.readSync(4);
+      raf.closeSync();
+      return (head.length >= 4 && head[0] == 0x89 && head[1] == 0x50) || // PNG
+          (head.length >= 2 && head[0] == 0xFF && head[1] == 0xD8); // JPEG
+    } catch (_) {
+      return false;
     }
   }
 
@@ -412,8 +482,15 @@ class _LauncherScreenState extends State<LauncherScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Background video
-              if (_videoReady)
+              // Background: still image from the panel, else video
+              if (_bgImagePath != null)
+                RepaintBoundary(
+                  child: Image.file(
+                    File(_bgImagePath!),
+                    fit: BoxFit.cover,
+                  ),
+                )
+              else if (_videoReady)
                 RepaintBoundary(
                   child: Video(
                     controller: _videoController,
@@ -622,36 +699,23 @@ class _LauncherScreenState extends State<LauncherScreen> {
                             child: Opacity(
                               // lekko przygaszony podczas pracy aplikacji
                               opacity: (state.isBusy && state.showProgress) ? 0.95 : 1.0,
-                              child: RichText(
-                                text: TextSpan(
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                    fontFamily: 'Norse',
-                                  ),
-                                  children: [
-                                    const TextSpan(text: ''),
-                                    TextSpan(text: '${I18n.instance.t('footer_designed_with')} '),
-                                    const WidgetSpan(
-                                      alignment: PlaceholderAlignment.middle,
-                                      child: Icon(
-                                        Icons.favorite,
-                                        size: 16,
-                                        color: Color(0xFFE53935), // red heart
-                                      ),
-                                    ),
-                                    const TextSpan(text: ' '),
-                                    TextSpan(text: '${I18n.instance.t('footer_by')} '),
-                                    TextSpan(
-                                      text: 'cygan',
-                                      style: const TextStyle(
-                                        color: Color(0xFF64B5F6),
-                                        decoration: TextDecoration.underline,
-                                      ),
-                                      recognizer: _linkRecognizer..onTap = _openLinkedIn,
-                                    ),
-                                  ],
-                                ),
+                              // Stopka w stylu panelu: repo · © · MIT · kawa
+                              child: Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                children: [
+                                  _footerLink('valheim-proxmox',
+                                      'https://github.com/PawelSzymanski89/valheim-proxmox'),
+                                  const Text('·', style: _footerStyle),
+                                  const Text('© 2026 Paweł Szymański',
+                                      style: _footerStyle),
+                                  const Text('·', style: _footerStyle),
+                                  _footerLink('MIT',
+                                      'https://github.com/PawelSzymanski89/valheim_launcher_proxmox/blob/master/LICENSE'),
+                                  const Text('·', style: _footerStyle),
+                                  _footerLink('☕ buymeacoffee.com/cygan',
+                                      'https://buymeacoffee.com/cygan'),
+                                ],
                               ),
                             ),
                           ),

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 /// Data model representing the server status exposed to the UI.
 class ServerStatus {
@@ -595,6 +597,12 @@ class SteamQueryService {
   final Duration interval;
   final Duration timeout;
 
+  /// Panel mode: when set, status comes from `<panelUrl>/api/launcher/status`
+  /// over HTTPS instead of A2S over UDP. The query port is rarely forwarded to
+  /// the internet, so UDP shows "offline" for a server that is up - the panel
+  /// sits next to the game and always knows.
+  final String? panelUrl;
+
   Timer? _timer;
   bool _running = false;
   bool _isPolling = false;
@@ -611,6 +619,7 @@ class SteamQueryService {
     required this.gamePort,
     this.interval = const Duration(seconds: 15),
     this.timeout = const Duration(seconds: 3),
+    this.panelUrl,
   });
 
   ValueListenable<SteamQueryStatus> get statusListenable => _statusNotifier;
@@ -658,6 +667,43 @@ class SteamQueryService {
   }
 
   Future<SteamQueryStatus> queryPlayers() async {
+    if (panelUrl != null && panelUrl!.trim().isNotEmpty) {
+      return _queryPanel();
+    }
+    return _queryA2S();
+  }
+
+  Future<SteamQueryStatus> _queryPanel() async {
+    try {
+      final base = panelUrl!.trim().replaceAll(RegExp(r'/+$'), '');
+      final sw = Stopwatch()..start();
+      final r = await http
+          .get(Uri.parse('$base/api/launcher/status'))
+          .timeout(const Duration(seconds: 8));
+      sw.stop();
+      if (r.statusCode != 200) {
+        return SteamQueryStatus(isAvailable: false, lastUpdated: DateTime.now());
+      }
+      final j = json.decode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      final names = ((j['names'] as List?) ?? const []).cast<String>();
+      return SteamQueryStatus(
+        isAvailable: j['online'] == true,
+        playerCount: (j['players'] as num?)?.toInt() ?? 0,
+        // RTT do panelu, nie do serwera gry — dla gracza to ta sama droga.
+        pingMs: sw.elapsedMilliseconds,
+        players: [
+          for (var i = 0; i < names.length; i++)
+            PlayerInfo(index: i, name: names[i], score: 0, durationSeconds: 0)
+        ],
+        lastUpdated: DateTime.now(),
+      );
+    } catch (e) {
+      return SteamQueryStatus(
+          isAvailable: false, lastUpdated: DateTime.now(), error: e.toString());
+    }
+  }
+
+  Future<SteamQueryStatus> _queryA2S() async {
     RawDatagramSocket? socket1;
     RawDatagramSocket? socket2;
 

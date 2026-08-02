@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 import 'package:crypto/crypto.dart';
 import 'crypto_config.dart' as cc;
+import 'panel_client.dart';
 
 /// Configuration model for launcher settings
 class LauncherConfig {
@@ -14,11 +15,15 @@ class LauncherConfig {
   final int serverPort;
   final String serverPassword;
 
+  /// Set in panel mode - widgets use it to ask the panel instead of A2S.
+  final String? panelUrl;
+
   const LauncherConfig({
     required this.serverName,
     required this.serverAddress,
     required this.serverPort,
     required this.serverPassword,
+    this.panelUrl,
   });
 
   factory LauncherConfig.fromJson(Map<String, dynamic> json) {
@@ -50,6 +55,31 @@ class LauncherConfig {
 }
 
 class LauncherConfigService {
+  // loadConfig is called from several widgets on startup - one manifest fetch
+  // serves them all for a while.
+  static PanelManifest? _manifestCache;
+  static DateTime? _manifestAt;
+
+  Future<PanelManifest?> _panelManifest(String panelUrl) async {
+    final now = DateTime.now();
+    if (_manifestCache != null &&
+        _manifestAt != null &&
+        now.difference(_manifestAt!) < const Duration(seconds: 30)) {
+      return _manifestCache;
+    }
+    final client = PanelClient(panelUrl);
+    try {
+      _manifestCache = await client.manifest()
+          .timeout(const Duration(seconds: 6));
+      _manifestAt = now;
+      return _manifestCache;
+    } catch (_) {
+      return _manifestCache; // stale beats nothing; null on first failure
+    } finally {
+      client.close();
+    }
+  }
+
   // Encryption key derived from app-specific data
   static const String _encryptionSalt = 'ValheimLauncher2024';
   
@@ -117,6 +147,38 @@ class LauncherConfigService {
   Future<LauncherConfig> loadConfig() async {
     // Detect if this is a generator-built launcher (has manifest.sig)
     final hasManifest = await _hasManifestSig();
+
+    // 0) Panel mode: the manifest is the truth. The name is set in the panel's
+    //    Settings, the address follows DDNS - both change without rebuilding
+    //    anything, so the baked values only break the tie when the panel is
+    //    unreachable.
+    try {
+      final decrypted = await cc.loadDecryptedConfig();
+      if (decrypted != null && decrypted.usesPanel) {
+        final manifest = await _panelManifest(decrypted.panelUrl);
+        if (manifest != null) {
+          return LauncherConfig(
+            serverName: manifest.serverName.isNotEmpty
+                ? manifest.serverName
+                : decrypted.serverName,
+            serverAddress:
+                manifest.serverAddress ?? Uri.parse(decrypted.panelUrl).host,
+            serverPort: manifest.serverPort,
+            serverPassword: decrypted.serverPassword,
+            panelUrl: decrypted.panelUrl,
+          );
+        }
+        return LauncherConfig(
+          serverName: decrypted.serverName,
+          serverAddress: Uri.parse(decrypted.panelUrl).host,
+          serverPort: decrypted.serverPort,
+          serverPassword: decrypted.serverPassword,
+          panelUrl: decrypted.panelUrl,
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[LauncherConfigService] panel config failed: $e');
+    }
 
     // 1) Try generated encrypted config
     try {

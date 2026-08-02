@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -102,10 +103,28 @@ class DecryptedConfig {
       );
 }
 
-/// Panel mode ships a plain `assets/panel_config.json` (no secrets inside —
-/// see the launcher module's crypto_config for the reasoning). Encrypted path
-/// stays as a fallback for builds from the upstream generator.
+/// The launcher's config file on disk, next to this updater. The updater ships
+/// from GitHub as a NEUTRAL package (its own bundled asset is a placeholder) —
+/// the per-server config lives in the launcher the panel handed to the player,
+/// and the updater serves whatever launcher it sits beside.
+File launcherConfigFile() {
+  final appRoot = File(Platform.resolvedExecutable).parent.parent.path;
+  final sep = Platform.pathSeparator;
+  return File('$appRoot${sep}data${sep}flutter_assets${sep}assets${sep}panel_config.json');
+}
+
+/// Panel mode reads a plain `panel_config.json` (no secrets inside — see the
+/// launcher module's crypto_config for the reasoning): first the launcher's
+/// on-disk copy, then our own bundled asset. Encrypted path stays as a
+/// fallback for builds from the upstream generator.
 Future<DecryptedConfig?> loadDecryptedConfig() async {
+  try {
+    final raw = await launcherConfigFile().readAsString();
+    final j = json.decode(raw) as Map<String, dynamic>;
+    if ((j['panelUrl'] as String? ?? '').trim().isNotEmpty) {
+      return DecryptedConfig.fromJson(j);
+    }
+  } catch (_) {}
   try {
     final raw = await rootBundle.loadString('assets/panel_config.json');
     final j = json.decode(raw) as Map<String, dynamic>;

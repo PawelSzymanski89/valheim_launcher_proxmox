@@ -38,6 +38,7 @@ class _ValheimServerStatusState extends State<ValheimServerStatus> {
         host: config.serverAddress,
         gamePort: config.serverPort,
         interval: const Duration(seconds: 5), // Częstsze odpytywanie dla statusu
+        panelUrl: config.panelUrl,
       );
       _service!.start();
 
@@ -183,6 +184,7 @@ class _PlayerCountPillState extends State<PlayerCountPill> {
       _service = SteamQueryService(
         host: _config!.serverAddress,
         gamePort: _config!.serverPort,
+        panelUrl: _config!.panelUrl,
       );
 
       _service!.start();

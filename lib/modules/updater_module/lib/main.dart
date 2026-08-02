@@ -136,8 +136,28 @@ class _UpdaterPageState extends State<UpdaterPage> {
         _progress = 0.6;
       });
 
+      // Paczka z GitHuba jest neutralna (placeholder w panel_config.json) —
+      // config wstrzyknięty przez panel serwera musi przeżyć aktualizację.
+      String? savedConfig;
+      try {
+        final cfgFile = launcherConfigFile();
+        if (await cfgFile.exists()) {
+          final raw = await cfgFile.readAsString();
+          if (raw.contains('"panelUrl"') && !raw.contains('"panelUrl": ""') &&
+              !raw.contains('"panelUrl":""')) {
+            savedConfig = raw;
+          }
+        }
+      } catch (_) {}
+
       // extract and overwrite
       await _extractZipOverwrite(localZipFile, parentDir); // Zmieniamy appDir na parentDir
+
+      if (savedConfig != null) {
+        try {
+          await launcherConfigFile().writeAsString(savedConfig);
+        } catch (_) {}
+      }
 
       setState(() {
         _message = 'uruchamianie...';

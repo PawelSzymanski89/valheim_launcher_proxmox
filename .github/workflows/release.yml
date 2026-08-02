@@ -1,11 +1,8 @@
-# Auto-update z gita: push tagu v* buduje launcher i updater na Windowsie
-# i publikuje release z launcher.zip + updater.zip. Launcher u graczy pyta
-# /releases/latest tego repo i sam się aktualizuje — bez kreatora, bez FTP.
-#
-# Konfiguracja przez repository variables (Settings → Secrets and variables →
-# Actions → Variables):
-#   PANEL_URL   — np. https://valheim.klans.eu (wymagane)
-#   SERVER_NAME — nazwa pokazywana graczom (domyślnie nazwa repo)
+# Push tagu v* buduje NEUTRALNĄ paczkę silnika: launcher.zip + updater.zip
+# bez adresu żadnego serwera (panel_config.json zostaje placeholderem).
+# Konfigurację wstrzykuje admin panel (valheim-proxmox) przy pobieraniu —
+# gracz dostaje gotowy launcher z panelu, nie z GitHuba. GitHub służy tylko
+# updaterowi jako źródło aktualizacji silnika.
 name: release
 
 on:
@@ -25,17 +22,6 @@ jobs:
         with:
           channel: stable
           cache: true
-
-      - name: Bake panel config
-        shell: bash
-        run: |
-          test -n "${{ vars.PANEL_URL }}" || { echo "Set the PANEL_URL repository variable"; exit 1; }
-          CFG=$(printf '{"serverName":"%s","panelUrl":"%s","engineRepo":"%s"}' \
-            "${{ vars.SERVER_NAME || github.event.repository.name }}" \
-            "${{ vars.PANEL_URL }}" \
-            "${{ github.repository }}")
-          echo "$CFG" | tee lib/modules/launcher_module/assets/panel_config.json \
-            > lib/modules/updater_module/assets/panel_config.json
 
       - name: Build launcher
         working-directory: lib/modules/launcher_module
