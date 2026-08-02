@@ -61,6 +61,7 @@ dependencies:
   package_info_plus: ^8.1.2
   # Crypto — PBKDF2-XOR decryption (shared with generator)
   crypto: ^3.0.3
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

@@ -15,6 +15,7 @@ dependencies:
   archive: ^3.6.1
   # Crypto — PBKDF2-XOR decryption (shared with generator)
   crypto: ^3.0.3
+  http: ^1.2.0
   shared_preferences: ^2.3.2
 dev_dependencies:
   flutter_test:

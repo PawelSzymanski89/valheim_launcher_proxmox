@@ -72,6 +72,17 @@ class DecryptedConfig {
   final String ftpUser;
   final String ftpPassword;
 
+  /// Where the panel lives, e.g. https://valheim.klans.eu. When this is set the
+  /// launcher takes mods and the background from it over HTTPS and the ftp
+  /// fields are ignored - they stay in the model so a config written by the
+  /// upstream generator still loads.
+  final String panelUrl;
+
+  /// Engine repository for self-updates, owner/name. Empty falls back to the
+  /// fork's own default, so a config generated before this existed still gets
+  /// updates.
+  final String engineRepo;
+
   const DecryptedConfig({
     required this.serverName,
     required this.serverAddr,
@@ -81,7 +92,12 @@ class DecryptedConfig {
     required this.ftpPort,
     required this.ftpUser,
     required this.ftpPassword,
+    this.panelUrl = '',
+    this.engineRepo = '',
   });
+
+  /// True when this server is served by a panel rather than an FTP account.
+  bool get usesPanel => panelUrl.trim().isNotEmpty;
 
   factory DecryptedConfig.fromJson(Map<String, dynamic> j) => DecryptedConfig(
         serverName: j['serverName'] as String? ?? '',
@@ -92,6 +108,8 @@ class DecryptedConfig {
         ftpPort: (j['ftpPort'] as num?)?.toInt() ?? 21,
         ftpUser: j['ftpUser'] as String? ?? '',
         ftpPassword: j['ftpPassword'] as String? ?? '',
+        panelUrl: j['panelUrl'] as String? ?? '',
+        engineRepo: j['engineRepo'] as String? ?? '',
       );
 
   FtpConfig toFtpConfig() => FtpConfig(
