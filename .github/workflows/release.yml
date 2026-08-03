@@ -56,6 +56,17 @@ jobs:
 
       - name: Stamp version and pack
         shell: bash
+        env:
+          # Ustaw w Settings → Secrets, żeby wydania były podpisane. Brak sekretu
+          # nie psuje builda — wychodzi wtedy wersja niepodpisana, jak dotąd.
+          WIN_CERT_B64: ${{ secrets.WIN_CERT_B64 }}
+          WIN_CERT_PASS: ${{ secrets.WIN_CERT_PASS }}
+          MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
+          MAC_CERT_PASS: ${{ secrets.MAC_CERT_PASS }}
+          MAC_SIGN_IDENTITY: ${{ secrets.MAC_SIGN_IDENTITY }}
+          MAC_NOTARY_KEY_B64: ${{ secrets.MAC_NOTARY_KEY_B64 }}
+          MAC_NOTARY_KEY_ID: ${{ secrets.MAC_NOTARY_KEY_ID }}
+          MAC_NOTARY_ISSUER: ${{ secrets.MAC_NOTARY_ISSUER }}
         run: |
           set -e
           case "${{ matrix.platform }}" in
@@ -63,6 +74,20 @@ jobs:
               L=lib/modules/launcher_module/build/windows/x64/runner/Release
               U=lib/modules/updater_module/build/windows/x64/runner/Release
               echo "$GITHUB_REF_NAME" > "$L/data/flutter_assets/assets/version.txt"
+              # Authenticode, gdy certyfikat jest w sekretach repo. Bez podpisu
+              # SmartScreen straszy gracza przy każdym pierwszym uruchomieniu, a
+              # z podpisem nie - to jedna z rzeczy, za które płaci klient komercyjny.
+              if [ -n "${WIN_CERT_B64:-}" ]; then
+                echo "$WIN_CERT_B64" | base64 -d > /tmp/cert.pfx
+                SIGNTOOL=$(find "/c/Program Files (x86)/Windows Kits/10/bin" -name signtool.exe -path "*x64*" | tail -1)
+                "$SIGNTOOL" sign -f /tmp/cert.pfx -p "$WIN_CERT_PASS" \
+                  -fd sha256 -tr http://timestamp.digicert.com -td sha256 \
+                  "$L/server_launcher.exe" "$U/server_updater.exe"
+                rm -f /tmp/cert.pfx
+                echo "podpisano Authenticode"
+              else
+                echo "brak WIN_CERT_B64 — wydanie niepodpisane"
+              fi
               (cd "$L" && 7z a -tzip "$GITHUB_WORKSPACE/launcher-windows.zip" .)
               (cd "$U" && 7z a -tzip "$GITHUB_WORKSPACE/updater-windows.zip" .)
               ;;
@@ -70,14 +95,39 @@ jobs:
               L=lib/modules/launcher_module/build/macos/Build/Products/Release
               U=lib/modules/updater_module/build/macos/Build/Products/Release
               echo "$GITHUB_REF_NAME" > "$L/server_launcher.app/Contents/Frameworks/App.framework/Resources/flutter_assets/assets/version.txt"
-              # Podpis ad-hoc po zmianie zawartości — bez niego macOS uznaje
-              # aplikację za uszkodzoną. Notaryzacji nie ma, więc gracz i tak
-              # otwiera ją raz przez prawy przycisk (opisane w README).
-              codesign --force --deep --sign - "$L/server_launcher.app"
-              codesign --force --deep --sign - "$U/server_updater.app"
+              # Prawdziwy podpis i notaryzacja, gdy w sekretach jest certyfikat
+              # Developer ID. Bez tego zostaje podpis ad-hoc, a gracz musi raz
+              # otworzyć aplikację prawym przyciskiem.
+              if [ -n "${MAC_CERT_B64:-}" ]; then
+                echo "$MAC_CERT_B64" | base64 -d > /tmp/cert.p12
+                security create-keychain -p ci build.keychain
+                security default-keychain -s build.keychain
+                security unlock-keychain -p ci build.keychain
+                security import /tmp/cert.p12 -k build.keychain -P "$MAC_CERT_PASS" -T /usr/bin/codesign
+                security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain >/dev/null
+                codesign --force --deep --options runtime --timestamp \
+                  --sign "$MAC_SIGN_IDENTITY" "$L/server_launcher.app" "$U/server_updater.app"
+                rm -f /tmp/cert.p12
+                echo "podpisano Developer ID"
+              else
+                codesign --force --deep --sign - "$L/server_launcher.app"
+                codesign --force --deep --sign - "$U/server_updater.app"
+              fi
               # ditto, nie zip: zachowuje dowiązania i prawa w pakiecie .app
               (cd "$L" && ditto -c -k --sequesterRsrc --keepParent server_launcher.app "$GITHUB_WORKSPACE/launcher-macos.zip")
               (cd "$U" && ditto -c -k --sequesterRsrc --keepParent server_updater.app "$GITHUB_WORKSPACE/updater-macos.zip")
+              if [ -n "${MAC_NOTARY_KEY_B64:-}" ]; then
+                echo "$MAC_NOTARY_KEY_B64" | base64 -d > /tmp/nk.p8
+                xcrun notarytool submit "$GITHUB_WORKSPACE/launcher-macos.zip" \
+                  --key /tmp/nk.p8 --key-id "$MAC_NOTARY_KEY_ID" --issuer "$MAC_NOTARY_ISSUER" --wait
+                # Bilet trzeba przybić do pakietu i spakować go ponownie, inaczej
+                # gracz bez internetu i tak zobaczy ostrzeżenie.
+                ditto -x -k "$GITHUB_WORKSPACE/launcher-macos.zip" /tmp/staple
+                xcrun stapler staple "/tmp/staple/server_launcher.app"
+                (cd /tmp/staple && ditto -c -k --sequesterRsrc --keepParent server_launcher.app "$GITHUB_WORKSPACE/launcher-macos.zip")
+                rm -f /tmp/nk.p8
+                echo "notaryzacja zakonczona"
+              fi
               ;;
             linux)
               L=lib/modules/launcher_module/build/linux/x64/release/bundle
