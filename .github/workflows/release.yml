@@ -74,6 +74,18 @@ jobs:
               L=lib/modules/launcher_module/build/windows/x64/runner/Release
               U=lib/modules/updater_module/build/windows/x64/runner/Release
               echo "$GITHUB_REF_NAME" > "$L/data/flutter_assets/assets/version.txt"
+              # Biblioteki MSVC obok exe. Świeży Windows ich nie ma — ma je dopiero
+              # maszyna, na której coś kiedyś doinstalowało redistributable. Bez nich
+              # launcher kończy się natychmiast, bez okna i bez wpisu w dzienniku
+              # zdarzeń, więc gracz widzi tylko "nic się nie dzieje". Sprawdzone na
+              # czystym Windowsie 11, 3 sierpnia 2026.
+              CRT=$(find "/c/Program Files/Microsoft Visual Studio" -type d \
+                    -name "Microsoft.VC*.CRT" -path "*x64*" 2>/dev/null | sort | tail -1)
+              [ -n "$CRT" ] || { echo "nie znalazłem bibliotek MSVC do dołączenia"; exit 1; }
+              for D in "$L" "$U"; do
+                cp "$CRT"/msvcp140*.dll "$CRT"/vcruntime140*.dll "$D/"
+              done
+              echo "dołączono MSVC z: $CRT"
               # Authenticode, gdy certyfikat jest w sekretach repo. Bez podpisu
               # SmartScreen straszy gracza przy każdym pierwszym uruchomieniu, a
               # z podpisem nie - to jedna z rzeczy, za które płaci klient komercyjny.
