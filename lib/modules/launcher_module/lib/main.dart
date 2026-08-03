@@ -110,6 +110,8 @@ class _LauncherScreenState extends State<LauncherScreen> {
       );
 
   void _showAboutDialog(BuildContext context) {
+    final cfg = context.read<LauncherCubit>().state.launcherConfig;
+    final t = I18n.instance.t;
     showDialog(
       context: context,
       barrierColor: Colors.black87,
@@ -121,69 +123,94 @@ class _LauncherScreenState extends State<LauncherScreen> {
         ),
         title: Row(
           children: [
-            const Icon(Icons.info_outline, color: Color(0xFF64B5F6)),
-            const SizedBox(width: 12),
-            Text(
-              I18n.instance.t('information_label'),
-              style: const TextStyle(color: Colors.white, fontFamily: 'Norse'),
+            if (cfg != null && cfg.serverName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: ServerIconBadge(serverName: cfg.serverName, size: 26),
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.only(right: 12),
+                child: Icon(Icons.info_outline, color: Color(0xFF64B5F6)),
+              ),
+            Expanded(
+              child: Text(
+                cfg?.serverName.isNotEmpty == true
+                    ? cfg!.serverName
+                    : t('information_label'),
+                style: const TextStyle(color: Colors.white, fontFamily: 'Norse'),
+              ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              I18n.instance.t('legal_disclaimer_title'),
-              style: const TextStyle(
-                color: Color(0xFF64B5F6),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              I18n.instance.t('legal_disclaimer_content'),
-              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
-            ),
-            const Divider(height: 32, color: Colors.white12),
-            Center(
-              child: Column(
-                children: [
-                   const Text(
-                    'Created with Valheim Launcher Generator',
-                    style: TextStyle(color: Colors.white38, fontSize: 11, fontFamily: 'Norse'),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t('about_what_is_this'),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 13, height: 1.5)),
+                const SizedBox(height: 16),
+
+                // Co ten launcher wie o serwerze - to samo, co przyszło z panelu,
+                // więc gracz widzi, dokąd faktycznie się łączy.
+                _aboutRow(t('about_server'),
+                    cfg == null || cfg.serverAddress.isEmpty
+                        ? '—'
+                        : '${cfg.serverAddress}:${cfg.serverPort}'),
+                _aboutRow(t('about_version'),
+                    _appVersion.isNotEmpty ? _appVersion : '—'),
+                _aboutRow(t('about_updates'), t('about_updates_value')),
+
+                const Divider(height: 28, color: Colors.white12),
+
+                _aboutSection(t('about_licence_title')),
+                Text(t('about_licence_body'),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 13, height: 1.5)),
+                const SizedBox(height: 8),
+                _aboutLink('pawel@howtodev.it', 'mailto:pawel@howtodev.it'),
+                _aboutLink(t('about_project_page'),
+                    'https://pawelszymanski89.github.io/valheim-proxmox/'),
+
+                const Divider(height: 28, color: Colors.white12),
+
+                _aboutSection(t('about_built_with_title')),
+                Text(t('about_built_with_body'),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 13, height: 1.5)),
+
+                const Divider(height: 28, color: Colors.white12),
+
+                _aboutSection(t('legal_disclaimer_title')),
+                Text(t('legal_disclaimer_content'),
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 12, height: 1.45)),
+
+                const SizedBox(height: 18),
+                Center(
+                  child: Column(
+                    children: [
+                      _aboutLink('☕ buymeacoffee.com/cygan',
+                          'https://buymeacoffee.com/cygan'),
+                      const SizedBox(height: 6),
+                      const Text('© 2026 Paweł Szymański (cygan)',
+                          style: TextStyle(color: Colors.white30, fontSize: 11)),
+                    ],
                   ),
-                  GestureDetector(
-                    onTap: () async {
-                      final uri = Uri.parse('https://github.com/PawelSzymanski89/valheim_launcher_generator');
-                      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-                        debugPrint('Could not launch $uri');
-                      }
-                    },
-                    child: const MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Text(
-                        'github.com/PawelSzymanski89/valheim_launcher_generator',
-                        style: TextStyle(color: Color(0xFF64B5F6), fontSize: 10, decoration: TextDecoration.underline),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '© 2026 Paweł Szymański (cygan)',
-                    style: TextStyle(color: Colors.white30, fontSize: 11),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              I18n.instance.t('dialog_close'),
+              t('dialog_close'),
               style: const TextStyle(color: Color(0xFF64B5F6), fontFamily: 'Norse'),
             ),
           ),
@@ -191,6 +218,49 @@ class _LauncherScreenState extends State<LauncherScreen> {
       ),
     );
   }
+
+  Widget _aboutSection(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(text,
+            style: const TextStyle(
+                color: Color(0xFF64B5F6),
+                fontWeight: FontWeight.bold,
+                fontSize: 15)),
+      );
+
+  Widget _aboutRow(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 150,
+              child: Text(label,
+                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
+            ),
+            Expanded(
+              child: Text(value,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ),
+          ],
+        ),
+      );
+
+  Widget _aboutLink(String text, String url) => Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () =>
+                launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+            child: Text(text,
+                style: const TextStyle(
+                    color: Color(0xFF64B5F6),
+                    fontSize: 12,
+                    decoration: TextDecoration.underline)),
+          ),
+        ),
+      );
 
   @override
   void initState() {

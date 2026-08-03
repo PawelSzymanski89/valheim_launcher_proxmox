@@ -65,5 +65,15 @@
   "password_copied_to_clipboard": "Hasło do serwera zostało skopiowane do schowka!",
   "information_label": "Informacje",
   "legal_disclaimer_title": "Oświadczenie prawne",
-  "legal_disclaimer_content": "Valheim® jest zarejestrowanym znakiem towarowym Iron Gate AB. Ten launcher jest niezależnym narzędziem i nie jest powiązany z Iron Gate AB ani Coffee Stain Studios. Nazwa Valheim została użyta wyłącznie w celu identyfikacji kompatybilności aplikacji z grą. Wszystkie prawa do marki i oryginalnych zasobów należą do ich prawnych właścicieli."
+  "legal_disclaimer_content": "Valheim® jest zarejestrowanym znakiem towarowym Iron Gate AB. Ten launcher jest niezależnym narzędziem i nie jest powiązany z Iron Gate AB ani Coffee Stain Studios. Nazwa Valheim została użyta wyłącznie w celu identyfikacji kompatybilności aplikacji z grą. Wszystkie prawa do marki i oryginalnych zasobów należą do ich prawnych właścicieli.",
+  "about_what_is_this": "Launcher tego serwera. Sprawdza, czy masz mody, których używa serwer, dociąga brakujące i usuwa zbędne, sam się aktualizuje i uruchamia grę — nic nie musisz instalować ręcznie.",
+  "about_server": "Serwer",
+  "about_version": "Wersja launchera",
+  "about_updates": "Aktualizacje",
+  "about_updates_value": "automatyczne, przy każdym uruchomieniu",
+  "about_licence_title": "Licencja",
+  "about_licence_body": "Granie i własny serwer dla znajomych — za darmo. Użycie komercyjne (hosting za pieniądze, sprzedaż, użycie w firmie) wymaga osobnej licencji. Napisz po cenę:",
+  "about_project_page": "Strona projektu",
+  "about_built_with_title": "Zbudowane z",
+  "about_built_with_body": "Mody ładuje BepInEx z UnityDoorstop, interfejs stoi na Flutterze. Te składniki mają własne licencje i należą do swoich autorów."
 }

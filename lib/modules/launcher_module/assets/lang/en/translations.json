@@ -65,5 +65,15 @@
   "password_copied_to_clipboard": "Server password copied to clipboard!",
   "information_label": "Information",
   "legal_disclaimer_title": "Legal Disclaimer",
-  "legal_disclaimer_content": "Valheim® is a registered trademark of Iron Gate AB. This launcher is an independent tool and is not affiliated with Iron Gate AB or Coffee Stain Studios. The Valheim name is used solely for the purpose of identifying game compatibility. All rights to the brand and original assets belong to their respective legal owners."
+  "legal_disclaimer_content": "Valheim® is a registered trademark of Iron Gate AB. This launcher is an independent tool and is not affiliated with Iron Gate AB or Coffee Stain Studios. The Valheim name is used solely for the purpose of identifying game compatibility. All rights to the brand and original assets belong to their respective legal owners.",
+  "about_what_is_this": "This server's launcher. It checks which mods the server runs, fetches what you are missing, removes what it no longer uses, updates itself and starts the game — nothing to install by hand.",
+  "about_server": "Server",
+  "about_version": "Launcher version",
+  "about_updates": "Updates",
+  "about_updates_value": "automatic, on every start",
+  "about_licence_title": "Licence",
+  "about_licence_body": "Playing, and running your own server for friends, is free. Commercial use (paid hosting, resale, use inside a business) needs a separate licence. Write for a price:",
+  "about_project_page": "Project page",
+  "about_built_with_title": "Built with",
+  "about_built_with_body": "Mods are loaded by BepInEx with UnityDoorstop, the interface runs on Flutter. Those components keep their own licences and belong to their authors."
 }
