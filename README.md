@@ -24,6 +24,14 @@ kreator z oryginalnego projektu jest tu zbędny i nieużywany.
 > tylko: gracz pobiera paczkę pod swój system, klika raz i gra ma mody. Sprawdzone na packu
 > z 72 modami — 1,5 GB w 466 plikach, 71 pluginów załadowanych, gra wstaje.
 
+<div align="center">
+<img src="docs/launcher.png" width="820" alt="Launcher po synchronizacji modów — gotowy do uruchomienia">
+<br><sub>Ten sam ekran na Windowsie, macOS i Linuksie — zrzut z Linuksa po pobraniu 72 modów.</sub>
+<br><br>
+<img src="docs/launcher-about.png" width="820" alt="Zakładka informacje — serwer, wersja, licencja">
+<br><sub>Zakładka informacje: dokąd łączy launcher, jaka wersja, co wolno na tej licencji.</sub>
+</div>
+
 ### Jak to działa
 
 ```
