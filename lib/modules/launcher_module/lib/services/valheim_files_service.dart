@@ -179,6 +179,16 @@ class ValheimFilesService {
       final script = File('$gameRoot${sep}run_bepinex.sh');
       if (await script.exists()) {
         await Process.run('chmod', ['+x', script.path]);
+        if (Platform.isMacOS) {
+          // Zmierzone na M1: gra jest uniwersalna, więc skrypt puszcza ją jako
+          // arm64 — i wtedy doorstop wchodzi do procesu, ale NIE zahacza Mono.
+          // BepInEx w ogóle nie startuje, bez jednej linijki błędu. Pod x86_64
+          // (Rosetta) ten sam plik ładuje wszystkie mody. Stąd ta podmiana.
+          final text = await script.readAsString();
+          final fixed = text.replaceAll(
+              'ARCHPREFERENCE="arm64,x86_64"', 'ARCHPREFERENCE="x86_64"');
+          if (fixed != text) await script.writeAsString(fixed);
+        }
       }
       if (kDebugMode) debugPrint('[ValheimFilesService] Unix doorstop ready in $gameRoot');
     } catch (e) {
