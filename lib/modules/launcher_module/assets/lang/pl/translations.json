@@ -72,7 +72,7 @@
   "about_updates": "Aktualizacje",
   "about_updates_value": "automatyczne, przy każdym uruchomieniu",
   "about_licence_title": "Licencja",
-  "about_licence_body": "Granie i własny serwer dla znajomych — za darmo. Użycie komercyjne (hosting za pieniądze, sprzedaż, użycie w firmie) wymaga osobnej licencji. Napisz po cenę:",
+  "about_licence_body": "Licencja MIT: używaj, zmieniaj i uruchamiaj — prywatnie i komercyjnie — zostawiając notkę o prawach autorskich. Wsparcie i podpisane wydania na życzenie:",
   "about_project_page": "Strona projektu",
   "about_built_with_title": "Zbudowane z",
   "about_built_with_body": "Mody ładuje BepInEx z UnityDoorstop, interfejs stoi na Flutterze. Te składniki mają własne licencje i należą do swoich autorów."

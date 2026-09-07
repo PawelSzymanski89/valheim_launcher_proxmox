@@ -72,7 +72,7 @@
   "about_updates": "Updates",
   "about_updates_value": "automatic, on every start",
   "about_licence_title": "Licence",
-  "about_licence_body": "Playing, and running your own server for friends, is free. Commercial use (paid hosting, resale, use inside a business) needs a separate licence. Write for a price:",
+  "about_licence_body": "MIT licence: use it, change it and run it — privately or commercially — keeping the copyright notice. Support and signed builds on request:",
   "about_project_page": "Project page",
   "about_built_with_title": "Built with",
   "about_built_with_body": "Mods are loaded by BepInEx with UnityDoorstop, the interface runs on Flutter. Those components keep their own licences and belong to their authors."

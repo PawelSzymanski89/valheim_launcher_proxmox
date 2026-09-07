@@ -7,7 +7,7 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Windows%20·%20macOS%20·%20Linux-supported-0078D4)](../../releases/latest)
-[![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-orange)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-cygan-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/cygan)
 
 </div>
@@ -28,8 +28,8 @@ kreator z oryginalnego projektu jest tu zbędny i nieużywany.
 <img src="docs/launcher.png" width="820" alt="Launcher po synchronizacji modów — gotowy do uruchomienia">
 <br><sub>Ten sam ekran na Windowsie, macOS i Linuksie — zrzut z Linuksa po pobraniu 72 modów.</sub>
 <br><br>
-<img src="docs/launcher-about.png" width="820" alt="Zakładka informacje — serwer, wersja, licencja">
-<br><sub>Zakładka informacje: dokąd łączy launcher, jaka wersja, co wolno na tej licencji.</sub>
+<img src="docs/launcher-about.png" width="820" alt="Zakładka informacje — serwer, wersja">
+<br><sub>Zakładka informacje: dokąd łączy launcher, jaka wersja, licencja MIT.</sub>
 </div>
 
 ### Jak to działa
