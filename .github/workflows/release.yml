@@ -38,7 +38,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends git curl ca-certificates unzip zip xz-utils jq \
-            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            build-essential clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev \
             libmpv-dev libasound2-dev
           git config --global --add safe.directory '*'
 
