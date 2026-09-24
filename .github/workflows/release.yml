@@ -24,23 +24,30 @@ jobs:
             platform: windows
           - os: macos-latest
             platform: macos
-          - os: ubuntu-22.04   # the oldest Ubuntu runner: a build links against its libstdc++, and a 24.04 build (GLIBCXX_3.4.32) did not start on Debian 12 or Ubuntu 22.04
+          # Built inside Debian 12: the binary links against that libstdc++ and libmpv.so.2, so it
+          # starts on Debian 12/13 and Ubuntu 24.04+. A 24.04 runner build needed GLIBCXX_3.4.32
+          # (not on Debian 12); a 22.04 build needed libmpv.so.1 (not on Debian 12 or 13).
+          - os: ubuntu-latest
             platform: linux
+            container: debian:12
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     steps:
+      - name: Linux build deps
+        if: matrix.platform == 'linux'
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git curl ca-certificates unzip zip xz-utils jq \
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            libmpv-dev libasound2-dev
+          git config --global --add safe.directory '*'
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
           cache: true
-
-      # Flutter na Linuksie potrzebuje GTK i ninja, a media_kit — libmpv.
-      - name: Linux build deps
-        if: matrix.platform == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build libgtk-3-dev libmpv-dev mpv libasound2-dev
 
       - name: Build launcher
         working-directory: lib/modules/launcher_module
