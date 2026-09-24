@@ -16,21 +16,57 @@ import 'package:http/http.dart' as http;
 /// leaves their players on an old one. A release on the engine repository
 /// reaches every server at once, without the admin doing anything - which is the
 /// whole point of splitting the engine from the per-server config.
-/// The project's release key (ed25519). Every release asset has a `.sig` made with it on
-/// the maintainer's machine - the private half is not on GitHub - and a download that does
-/// not verify is thrown away. The repository comes from the server's config, so without
-/// this a server (or anyone who got hold of the GitHub account) could hand every player
-/// any program it liked as an "update".
-const releaseKey = 'WwQ2bZrUDQpTQhWzJgT4ojDUo5DXnHi8DuXvTRBZgX0=';
+/// The project's release keys (ed25519): the working one and a backup kept offline. Every
+/// release asset has a `.sig` made on the maintainer's machine - the private halves are not
+/// on GitHub - and a download no trusted key signed is thrown away. The repository comes
+/// from the server's config, so without this a server (or anyone who got hold of the GitHub
+/// account) could hand every player any program it liked as an "update".
+const releaseKeys = [
+  'WwQ2bZrUDQpTQhWzJgT4ojDUo5DXnHi8DuXvTRBZgX0=',
+  '649uL/TAv45znSgfclQMBTS3IhUV45Fh3ax2vsYaRDA=',
+];
 
-Future<bool> verifyRelease(List<int> data, String sigB64) async {
+/// A release may carry release-keys.txt (+ .sig by a key trusted now); from then on that
+/// list replaces the built-in pair - how a lost or leaked key is swapped out without every
+/// player reinstalling. Kept per user, next to the launcher's other data.
+String Function() releaseKeysFile = () {
+  final env = Platform.environment;
+  final base = Platform.isWindows
+      ? (env['APPDATA'] ?? env['LOCALAPPDATA'] ?? Directory.systemTemp.path)
+      : Platform.isMacOS
+          ? '${env['HOME']}/Library/Application Support'
+          : (env['XDG_DATA_HOME'] ?? '${env['HOME']}/.local/share');
+  return '$base${Platform.pathSeparator}schron_twarda_launcher${Platform.pathSeparator}release-keys.txt';
+};
+
+final _keyLine = RegExp(r'^[A-Za-z0-9+/]{43}=$');
+
+List<String> trustedKeys() {
   try {
-    final key = cg.SimplePublicKey(base64.decode(releaseKey), type: cg.KeyPairType.ed25519);
-    return await cg.Ed25519().verify(data,
-        signature: cg.Signature(base64.decode(sigB64.trim()), publicKey: key));
+    final keys = File(releaseKeysFile())
+        .readAsLinesSync()
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty && !l.startsWith('#'))
+        .toList();
+    if (keys.isNotEmpty && keys.every(_keyLine.hasMatch)) return keys;
+  } catch (_) {}
+  return releaseKeys;
+}
+
+Future<bool> verifyRelease(List<int> data, String sigB64, {List<String>? keys}) async {
+  final List<int> sig;
+  try {
+    sig = base64.decode(sigB64.trim());
   } catch (_) {
     return false;
   }
+  for (final k in keys ?? trustedKeys()) {
+    try {
+      final key = cg.SimplePublicKey(base64.decode(k), type: cg.KeyPairType.ed25519);
+      if (await cg.Ed25519().verify(data, signature: cg.Signature(sig, publicKey: key))) return true;
+    } catch (_) {}
+  }
+  return false;
 }
 
 class GithubEngine {
@@ -120,10 +156,28 @@ class GithubEngine {
         await out.delete();
         return false;
       }
+      await _takeKeyList(release);
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  /// A new key list from the same release, if it has one signed by a key trusted now.
+  Future<void> _takeKeyList(EngineRelease release) async {
+    try {
+      final dir = release.assetUrl.substring(0, release.assetUrl.lastIndexOf('/'));
+      final list = await _http.get(Uri.parse('$dir/release-keys.txt'));
+      if (list.statusCode != 200) return;
+      final sig = await _http.get(Uri.parse('$dir/release-keys.txt.sig'));
+      if (sig.statusCode != 200 || !await verifyRelease(list.bodyBytes, sig.body)) return;
+      final keys = utf8.decode(list.bodyBytes).split('\n').map((l) => l.trim())
+          .where((l) => l.isNotEmpty && !l.startsWith('#')).toList();
+      if (keys.isEmpty || !keys.every(_keyLine.hasMatch)) return;
+      final f = File(releaseKeysFile());
+      await f.parent.create(recursive: true);
+      await f.writeAsString('${keys.join('\n')}\n');
+    } catch (_) {}
   }
 
   void close() => _http.close();
