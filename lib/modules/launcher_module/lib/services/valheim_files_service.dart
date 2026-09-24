@@ -1104,6 +1104,12 @@ class ValheimFilesService {
   /// Keeps `<appRoot>/updater` current with the engine repo's updater.zip.
   Future<bool> _panelCheckAndRunUpdater(DecryptedConfig cfg,
       {required void Function(double progress, String status) onProgress}) async {
+    // macOS and Linux need no separate updater: a running program may replace its own files
+    // there, so the launcher updates itself (_selfUpdateUnix)
+    if (!Platform.isWindows) {
+      onProgress(1.0, I18n.instance.t('updater_up_to_date'));
+      return false;
+    }
     final engine = _engine(cfg);
     try {
       final release = await engine.latest(asset: GithubEngine.platformAsset('updater'));
@@ -1187,6 +1193,7 @@ class ValheimFilesService {
         debugPrint('[LauncherUpdate][panel] ${release.tag} > $currentVersion, starting updater');
       }
       onProgress(0.5, I18n.instance.t('new_launcher_version'));
+      if (!Platform.isWindows) return await _selfUpdateUnix(engine, release, onProgress);
 
       final updaterExe = _findUpdaterExe(_appRoot);
       if (updaterExe == null) {
@@ -1209,6 +1216,82 @@ class ValheimFilesService {
     }
   }
 }
+
+/// macOS and Linux: the launcher replaces itself with a newer release and starts it again.
+/// The download goes through GithubEngine.download, so it is signature-checked like every
+/// other release file. One try per release: a build that for some reason does not report the
+/// new version must not update on every start.
+extension _SelfUpdate on ValheimFilesService {
+  Future<bool> _selfUpdateUnix(GithubEngine engine, EngineRelease release,
+      void Function(double progress, String status) onProgress) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getString('self_update_tried') == release.tag) return false;
+    await prefs.setString('self_update_tried', release.tag);
+    final tmp = Directory.systemTemp.createTempSync('selfupd_');
+    try {
+      final zip = p.join(tmp.path, 'launcher.zip');
+      if (!await engine.download(release, zip)) return false;
+      onProgress(0.8, I18n.instance.t('new_launcher_version'));
+      final exe = Platform.resolvedExecutable;
+      if (Platform.isMacOS) {
+        // .../<Server> Launcher.app/Contents/MacOS/server_launcher - the panel renamed the .app,
+        // panel_config.json sits next to it and stays
+        final app = p.dirname(p.dirname(p.dirname(exe)));
+        if (!app.endsWith('.app')) return false;
+        final unpack = p.join(tmp.path, 'unpack');
+        if ((await Process.run('ditto', ['-x', '-k', zip, unpack])).exitCode != 0) return false;
+        final fresh = p.join(unpack, 'server_launcher.app');
+        if ((await Process.run('codesign', ['--verify', '--deep', fresh])).exitCode != 0) return false;
+        // copied next to the old one first (the temp folder may be another volume), then swapped
+        final staged = '$app.new', old = '$app.old';
+        for (final d in [staged, old]) {
+          if (Directory(d).existsSync()) Directory(d).deleteSync(recursive: true);
+        }
+        if ((await Process.run('ditto', [fresh, staged])).exitCode != 0) return false;
+        await Directory(app).rename(old);
+        try {
+          await Directory(staged).rename(app);
+        } catch (_) {
+          await Directory(old).rename(app);          // put the old one back, never leave nothing
+          return false;
+        }
+        try { Directory(old).deleteSync(recursive: true); } catch (_) {}
+        await Process.start('open', ['-n', app], mode: ProcessStartMode.detached);
+        return true;
+      }
+      // Linux: the program folder may hold the player's own files too, so it is updated file by
+      // file, each written next to its target and renamed over it - a running binary or a loaded
+      // library cannot be overwritten in place (ETXTBSY, or a crash), but it can be replaced
+      final bundle = p.dirname(exe), name = p.basename(exe);
+      final unpack = p.join(tmp.path, 'unpack');
+      if ((await Process.run('unzip', ['-q', '-o', zip, '-d', unpack])).exitCode != 0) return false;
+      final r = await Process.run('sh', ['-c', linuxReplaceScript, 'selfupdate', unpack, bundle, name]);
+      if (r.exitCode != 0) return false;
+      await Process.start(exe, [], workingDirectory: bundle, mode: ProcessStartMode.detached);
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SelfUpdate] $e');
+      return false;
+    } finally {
+      try { tmp.deleteSync(recursive: true); } catch (_) {}
+    }
+  }
+}
+
+/// \$1 = unpacked release, \$2 = program folder, \$3 = the program's name there (the panel
+/// renames server_launcher after the server). Every file is copied next to its target and
+/// renamed over it.
+const linuxReplaceScript = r'''
+set -eu
+src=$1 dst=$2 name=$3
+cd "$src"
+[ "$name" = server_launcher ] || [ ! -f server_launcher ] || mv -f server_launcher "$name"
+find . -type f | while IFS= read -r f; do
+  mkdir -p "$dst/$(dirname "$f")"
+  cp -p "$f" "$dst/$f.selfupd"
+  mv -f "$dst/$f.selfupd" "$dst/$f"
+done
+''';
 
 // ─── ISOLATE TASKS ──────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+import 'package:path/path.dart' as p;
 import 'package:server_launcher/services/game_locator.dart';
 import 'dart:async';
 import 'dart:io';
@@ -879,7 +880,14 @@ class LauncherCubit extends Cubit<LauncherState> {
       try {
         final resolved = Platform.resolvedExecutable;
         final exeDir = File(resolved).parent.path;
-        final versionFile = File('$exeDir${Platform.pathSeparator}data${Platform.pathSeparator}flutter_assets${Platform.pathSeparator}assets${Platform.pathSeparator}version.txt');
+        var versionFile = File('$exeDir${Platform.pathSeparator}data${Platform.pathSeparator}flutter_assets${Platform.pathSeparator}assets${Platform.pathSeparator}version.txt');
+        // macOS keeps the assets inside the bundle's framework, and CI stamps the version there;
+        // without this the Mac fell back to the pubspec version, which reads older than every
+        // release - an update on every start once the Mac could update itself
+        if (Platform.isMacOS) {
+          versionFile = File(p.join(p.dirname(exeDir), 'Frameworks', 'App.framework', 'Resources',
+              'flutter_assets', 'assets', 'version.txt'));
+        }
         if (await versionFile.exists()) {
           currentVersion = (await versionFile.readAsString()).trim();
           if (kDebugMode) debugPrint('[LauncherCubit] Wersja z version.txt: $currentVersion');
