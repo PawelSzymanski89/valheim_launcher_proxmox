@@ -150,8 +150,12 @@ jobs:
               ;;
           esac
 
+      # A draft: every launcher (and every panel serving one) refuses a release whose files
+      # are not signed with the project key, and that key is not on GitHub. The maintainer
+      # signs the files locally and publishes: scripts/sign-and-publish.sh <tag>
       - uses: softprops/action-gh-release@v2
         with:
+          draft: true
           files: |
             launcher-${{ matrix.platform }}.zip
             updater-${{ matrix.platform }}.zip

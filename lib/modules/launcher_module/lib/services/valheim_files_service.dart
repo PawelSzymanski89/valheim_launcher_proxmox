@@ -1143,6 +1143,8 @@ class ValheimFilesService {
         for (final f in archive) {
           final outPath =
               '${unpack.path}${Platform.pathSeparator}${f.name.replaceAll('/', Platform.pathSeparator)}';
+          // an entry named "../../x" must not land outside the unpack folder
+          if (!p.isWithin(unpack.path, p.normalize(outPath))) continue;
           if (f.isFile) {
             final out = File(outPath);
             await out.parent.create(recursive: true);
