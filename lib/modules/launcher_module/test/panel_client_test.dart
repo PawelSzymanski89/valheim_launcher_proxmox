@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -57,6 +58,17 @@ void main() {
     // later, someone on the path answers unsigned - refused, the key was pinned
     final later = PanelClient('http://p', client: panel(body));
     expect(later.manifest(), throwsA(isA<ManifestSignatureException>()));
+  });
+
+  test('the background is fetched only from the panel itself', () async {
+    final hits = <Uri>[];
+    final c = PanelClient('http://panel.lan:2460',
+        client: MockClient((r) async { hits.add(r.url); return http.Response.bytes([1, 2, 3], 200); }));
+    final d = Directory.systemTemp.createTempSync('bg').path;
+    expect(await c.syncBackground('https://evil.example/x.png', '$d/bg', '$d/bg.stamp', 's1'), isFalse);
+    expect(hits, isEmpty);
+    expect(await c.syncBackground('/api/launcher/background?v=1', '$d/bg', '$d/bg.stamp', 's2'), isTrue);
+    expect(hits.single.host, 'panel.lan');
   });
 
   test('an old panel that signs nothing still works for an old launcher', () async {
