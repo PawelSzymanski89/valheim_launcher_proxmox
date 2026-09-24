@@ -1,3 +1,4 @@
+import 'package:server_launcher/services/fs_util.dart';
 import 'package:path/path.dart' as p;
 import 'package:server_launcher/services/game_locator.dart';
 import 'dart:async';
@@ -498,6 +499,10 @@ class LauncherCubit extends Cubit<LauncherState> {
                 }
               }
             } catch (_) {}
+          }
+          // the folders of the mods just moved aside, now empty
+          for (final sub in ['plugins', 'patchers']) {
+            removeEmptyDirs(p.join(gameRoot, 'BepInEx', sub));
           }
         }
       } catch (_) {}
