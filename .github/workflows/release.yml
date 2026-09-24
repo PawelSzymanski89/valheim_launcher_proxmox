@@ -24,7 +24,7 @@ jobs:
             platform: windows
           - os: macos-latest
             platform: macos
-          - os: ubuntu-latest
+          - os: ubuntu-22.04   # the oldest Ubuntu runner: a build links against its libstdc++, and a 24.04 build (GLIBCXX_3.4.32) did not start on Debian 12 or Ubuntu 22.04
             platform: linux
     runs-on: ${{ matrix.os }}
     steps:
