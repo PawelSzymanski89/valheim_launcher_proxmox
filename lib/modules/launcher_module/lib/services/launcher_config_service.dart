@@ -60,14 +60,14 @@ class LauncherConfigService {
   static PanelManifest? _manifestCache;
   static DateTime? _manifestAt;
 
-  Future<PanelManifest?> _panelManifest(String panelUrl) async {
+  Future<PanelManifest?> _panelManifest(String panelUrl, String manifestKey) async {
     final now = DateTime.now();
     if (_manifestCache != null &&
         _manifestAt != null &&
         now.difference(_manifestAt!) < const Duration(seconds: 30)) {
       return _manifestCache;
     }
-    final client = PanelClient(panelUrl);
+    final client = PanelClient(panelUrl, manifestKey: manifestKey);
     try {
       _manifestCache = await client.manifest()
           .timeout(const Duration(seconds: 6));
@@ -155,7 +155,7 @@ class LauncherConfigService {
     try {
       final decrypted = await cc.loadDecryptedConfig();
       if (decrypted != null && decrypted.usesPanel) {
-        final manifest = await _panelManifest(decrypted.panelUrl);
+        final manifest = await _panelManifest(decrypted.panelUrl, decrypted.manifestKey);
         if (manifest != null) {
           return LauncherConfig(
             serverName: manifest.serverName.isNotEmpty

@@ -63,6 +63,8 @@ dependencies:
   package_info_plus: ^8.1.2
   # Crypto — PBKDF2-XOR decryption (shared with generator)
   crypto: ^3.0.3
+  # ed25519 for the panel's manifest signature (pure Dart, same on all three systems)
+  cryptography: ^2.7.0
   http: ^1.2.0
 
 dev_dependencies:

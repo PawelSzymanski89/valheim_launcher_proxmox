@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart' as cg;
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Talks to the valheim-proxmox panel over HTTPS instead of FTP.
 ///
@@ -16,7 +19,11 @@ class PanelClient {
   final String baseUrl;
   final http.Client _http;
 
-  PanelClient(String baseUrl, {http.Client? client})
+  /// The panel's manifest key from panel_config.json, or empty for a launcher built
+  /// before panels signed their manifests - that one pins the key it sees first.
+  final String manifestKey;
+
+  PanelClient(String baseUrl, {http.Client? client, this.manifestKey = ''})
       : baseUrl = baseUrl.replaceAll(RegExp(r'/+$'), ''),
         _http = client ?? http.Client();
 
@@ -25,14 +32,50 @@ class PanelClient {
   /// Everything the launcher needs in one call: server details, the mod list and
   /// every file with its hash. Throws [PanelOffException] when the admin has the
   /// launcher turned off, which is a normal answer rather than a failure.
+  ///
+  /// The manifest decides which DLLs end up in the player's game, and the panel is
+  /// reached over plain http more often than not - so it is signed, and checked here
+  /// against the key this launcher was built with. A launcher from before that has no
+  /// key in its config: it trusts the first key it sees for this panel and holds every
+  /// later manifest to it (trust on first use, like ssh).
   Future<PanelManifest> manifest() async {
     final r = await _http.get(_u('/api/launcher/manifest'));
     if (r.statusCode == 404) throw PanelOffException();
     if (r.statusCode != 200) {
       throw Exception('Panel answered ${r.statusCode}');
     }
+    final sig = r.headers['x-manifest-signature'];
+    final offered = r.headers['x-manifest-key'];
+    final expected = manifestKey.isNotEmpty ? manifestKey : await _pinnedKey();
+    if (expected != null) {
+      if (sig == null || !await verifyManifest(r.bodyBytes, sig, expected)) {
+        throw ManifestSignatureException();
+      }
+    } else if (sig != null && offered != null &&
+        await verifyManifest(r.bodyBytes, sig, offered)) {
+      await _pinKey(offered);
+    }
     return PanelManifest.fromJson(
         json.decode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>);
+  }
+
+  String get _pinName => 'manifest_key|$baseUrl';
+
+  Future<String?> _pinnedKey() async =>
+      (await SharedPreferences.getInstance()).getString(_pinName);
+
+  Future<void> _pinKey(String key) async =>
+      (await SharedPreferences.getInstance()).setString(_pinName, key);
+
+  /// ed25519 over the exact bytes the panel sent.
+  static Future<bool> verifyManifest(List<int> body, String sigB64, String keyB64) async {
+    try {
+      final key = cg.SimplePublicKey(base64.decode(keyB64), type: cg.KeyPairType.ed25519);
+      return await cg.Ed25519().verify(body,
+          signature: cg.Signature(base64.decode(sigB64), publicKey: key));
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Downloads one file from the manifest to [target], creating parent folders.
@@ -93,6 +136,22 @@ class PanelClient {
   void close() => _http.close();
 }
 
+/// The manifest did not carry a valid signature for the key this launcher trusts.
+class ManifestSignatureException implements Exception {
+  @override
+  String toString() =>
+      'The mod list from the panel is not signed by the panel this launcher belongs to - '
+      'refusing to install anything (someone may be tampering with the connection)';
+}
+
+/// A manifest entry pointing outside the BepInEx folder.
+class UnsafePathException implements Exception {
+  final String path;
+  UnsafePathException(this.path);
+  @override
+  String toString() => 'The panel listed a file outside BepInEx: $path - refusing to sync';
+}
+
 /// The panel is reachable but the admin has the launcher switched off.
 class PanelOffException implements Exception {
   @override
@@ -106,11 +165,27 @@ class PanelFile {
 
   const PanelFile({required this.path, required this.size, required this.sha256});
 
-  factory PanelFile.fromJson(Map<String, dynamic> j) => PanelFile(
-        path: j['path'] as String,
-        size: (j['size'] as num?)?.toInt() ?? 0,
-        sha256: j['sha256'] as String? ?? '',
-      );
+  factory PanelFile.fromJson(Map<String, dynamic> j) {
+    final path = j['path'] as String;
+    if (!isSafePath(path)) throw UnsafePathException(path);
+    return PanelFile(
+      path: path,
+      size: (j['size'] as num?)?.toInt() ?? 0,
+      sha256: j['sha256'] as String? ?? '',
+    );
+  }
+
+  /// A manifest path is relative to BepInEx/ and stays inside it. Nothing absolute, no
+  /// drive letter or UNC share, no ".." - a path like "../../../../.bashrc" used to land
+  /// exactly where it pointed, outside the game, and run at the player's next login.
+  static bool isSafePath(String path) {
+    if (path.isEmpty || path.contains('\u0000') || path.contains(':')) return false;
+    final unified = path.replaceAll('\\', '/');
+    if (unified.startsWith('/')) return false;
+    final parts = unified.split('/');
+    if (parts.any((s) => s == '..' || s == '.')) return false;
+    return p.posix.isWithin('BepInEx', p.posix.normalize(p.posix.join('BepInEx', unified)));
+  }
 }
 
 class PanelManifest {

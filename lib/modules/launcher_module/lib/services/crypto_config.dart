@@ -84,6 +84,11 @@ class DecryptedConfig {
   /// updates.
   final String engineRepo;
 
+  /// The panel's manifest signing key (ed25519, base64), written by the panel into the
+  /// launcher it builds. With it, a manifest that does not carry a valid signature is
+  /// refused - panels are mostly plain http, and the manifest decides which DLLs run.
+  final String manifestKey;
+
   const DecryptedConfig({
     required this.serverName,
     required this.serverAddr,
@@ -95,6 +100,7 @@ class DecryptedConfig {
     required this.ftpPassword,
     this.panelUrl = '',
     this.engineRepo = '',
+    this.manifestKey = '',
   });
 
   /// True when this server is served by a panel rather than an FTP account.
@@ -111,6 +117,7 @@ class DecryptedConfig {
         ftpPassword: j['ftpPassword'] as String? ?? '',
         panelUrl: j['panelUrl'] as String? ?? '',
         engineRepo: j['engineRepo'] as String? ?? '',
+        manifestKey: j['manifestKey'] as String? ?? '',
       );
 
   FtpConfig toFtpConfig() => FtpConfig(

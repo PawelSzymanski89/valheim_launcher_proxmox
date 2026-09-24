@@ -260,7 +260,7 @@ class ValheimFilesService {
       final exe = await findValheimExecutable();
       if (exe == null) throw Exception('Nie znaleziono Valheim.exe.');
       final target = File('${File(exe).parent.path}${Platform.pathSeparator}mods_list.json');
-      final client = PanelClient(panelCfg.panelUrl);
+      final client = PanelClient(panelCfg.panelUrl, manifestKey: panelCfg.manifestKey);
       try {
         final m = await client.manifest();
         _panelFiles = {for (final f in m.files) f.path: f};
@@ -372,7 +372,7 @@ class ValheimFilesService {
     if (decrypted == null) throw Exception('Nie można wczytać zaszyfrowanej konfiguracji FTP.');
 
     if (decrypted.usesPanel) {
-      final client = PanelClient(decrypted.panelUrl);
+      final client = PanelClient(decrypted.panelUrl, manifestKey: decrypted.manifestKey);
       try {
         final m = await client.manifest();
         _panelFiles = {for (final f in m.files) f.path: f};
@@ -471,7 +471,7 @@ class ValheimFilesService {
       // plików, a każdy z osobna czekałby całe RTT do panelu. Powyżej tego
       // wąskim gardłem jest i tak łącze w górę, a nie liczba połączeń.
       const pool = 10;
-      final client = PanelClient(decrypted.panelUrl);
+      final client = PanelClient(decrypted.panelUrl, manifestKey: decrypted.manifestKey);
       var completed = 0;
       var next = 0;
       try {
@@ -483,6 +483,14 @@ class ValheimFilesService {
             if (rel.startsWith('/')) rel = rel.substring(1);
             final localPath =
                 '$localBase${Platform.pathSeparator}${rel.replaceAll('/', Platform.pathSeparator)}';
+            // Second line of defence behind PanelFile.isSafePath: whatever the entry says,
+            // nothing is written outside <game>/BepInEx.
+            final bep = p.join(localBase, 'BepInEx');
+            if (!p.isWithin(bep, p.normalize(localPath))) {
+              if (kDebugMode) debugPrint('[ValheimFilesService] refusing path outside BepInEx: $rel');
+              onProgress(completed, entries.length, '/$rel', false, item);
+              continue;
+            }
             // Lokalna ścieżka jest względem roota gry; panel adresuje pliki
             // względem BepInEx/ — zdejmujemy prefiks nałożony przy manifeście.
             final panelPath =

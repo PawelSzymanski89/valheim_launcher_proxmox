@@ -385,7 +385,7 @@ class _LauncherScreenState extends State<LauncherScreen> {
     try {
       final decrypted = await cc.loadDecryptedConfig();
       if (decrypted == null || !decrypted.usesPanel) return null;
-      final client = PanelClient(decrypted.panelUrl);
+      final client = PanelClient(decrypted.panelUrl, manifestKey: decrypted.manifestKey);
       try {
         final m = await client.manifest().timeout(const Duration(seconds: 6));
         final url = m.backgroundUrl;
