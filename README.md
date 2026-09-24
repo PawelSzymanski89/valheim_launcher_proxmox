@@ -130,6 +130,21 @@ Forked from [valheim_launcher_generator](https://github.com/PawelSzymanski89/val
 the FTP-era wizard, patcher and crypto remain in the tree only as legacy fallback.
 See [BRANCH.md](BRANCH.md) for the full design rationale.
 
+**Do not use the legacy FTP mode.** A launcher built that way carries the FTP login inside
+every copy handed to players, and the key that decrypts it ships in the same program — any
+player can recover it, write to the mod store, and plant code on everyone. FTP is also
+plaintext on the wire. Use the panel mode: the launcher then needs no account at all, the
+mod list is signed by the panel, and every file is checked by hash. / **Nie używaj starego
+trybu FTP**: login FTP jest w każdej kopii launchera razem z kluczem do jego odszyfrowania,
+więc każdy gracz może go wyciągnąć i podrzucić wszystkim własny kod.
+
+**Security model.** Whoever runs the panel decides which BepInEx plugins players load — that
+is code, by design, so players trust the server they join. What the launcher guarantees on top:
+files never land outside `BepInEx`, the mod list is signed by the panel the launcher came from
+(so nobody between the player and a plain-http panel can swap it), deletions stay inside
+`BepInEx/plugins` and `BepInEx/patchers`, and self-updates install only releases signed with
+the project key (`.sig` next to each asset), which is kept off GitHub.
+
 Podoba się? [Postaw kawę ☕](https://buymeacoffee.com/cygan) / Like it? [Buy me a coffee ☕](https://buymeacoffee.com/cygan)
 
 *Valheim® is a registered trademark of Iron Gate AB. This is an independent,

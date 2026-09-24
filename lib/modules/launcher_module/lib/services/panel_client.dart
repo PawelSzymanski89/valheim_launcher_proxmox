@@ -119,7 +119,11 @@ class PanelClient {
     if (await current.exists() && await stampOnDisk.exists()) {
       if ((await stampOnDisk.readAsString()).trim() == stamp) return false;
     }
-    final r = await _http.get(url.startsWith('http') ? Uri.parse(url) : _u(url));
+    // the panel's own address only - a manifest naming any other host would have the
+    // launcher fetch from wherever it said
+    final u = url.startsWith('http') ? Uri.parse(url) : _u(url);
+    if (u.origin != Uri.parse(baseUrl).origin) return false;
+    final r = await _http.get(u);
     if (r.statusCode != 200) return false;
     final out = File(target);
     await out.parent.create(recursive: true);

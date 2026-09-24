@@ -133,3 +133,24 @@ class GameLocator {
   /// launcher at their install by hand gets the same checks.
   static Future<bool> looksLikeGame(String path) => _exists(path);
 }
+
+/// The launcher's own folder for its cache and logs, per user. Never a shared temp folder
+/// (on Linux /tmp belongs to everyone: another user could plant a "saved game path" there
+/// and have the launcher start their program), and never next to the program itself (inside
+/// a signed macOS .app that breaks the signature).
+String launcherDataDir() {
+  final env = Platform.environment;
+  final String base;
+  if (Platform.isWindows) {
+    base = env['APPDATA'] ?? env['LOCALAPPDATA'] ?? Directory.systemTemp.path;
+  } else if (Platform.isMacOS) {
+    base = '${env['HOME']}/Library/Application Support';
+  } else {
+    base = env['XDG_DATA_HOME'] ?? '${env['HOME']}/.local/share';
+  }
+  final dir = Directory('$base${Platform.pathSeparator}schron_twarda_launcher');
+  try {
+    dir.createSync(recursive: true);
+  } catch (_) {}
+  return dir.path;
+}

@@ -1,3 +1,4 @@
+import 'package:server_launcher/services/game_locator.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -446,7 +447,14 @@ class LauncherCubit extends Cubit<LauncherState> {
         final refreshedLocal = await filesService.listLocalModFiles(gameRoot);
         final finalComparison = await filesService.compareRemoteAndLocal(
             remoteList, refreshedLocal, sizeTolerance: 2);
-        final finalToDelete = List<LocalFileEntry>.from(finalComparison['toDelete'] ?? <LocalFileEntry>[]);
+        // Only what the server's mods put there: plugins and patchers. A panel that answered
+        // an empty (or hostile) list used to have BepInEx/core and the player's own configs
+        // moved out of the way along with everything else.
+        final finalToDelete = List<LocalFileEntry>.from(finalComparison['toDelete'] ?? <LocalFileEntry>[])
+            .where((f) {
+              final r = f.relativePath.replaceAll('\\', '/');
+              return r.startsWith('BepInEx/plugins/') || r.startsWith('BepInEx/patchers/');
+            }).toList();
 
         if (finalToDelete.isNotEmpty) {
           final ts = DateTime.now().toIso8601String().replaceAll(':', '-');
@@ -523,9 +531,7 @@ class LauncherCubit extends Cubit<LauncherState> {
 
   Future<void> _appendLaunchLog(String msg) async {
     try {
-      final tmp = Directory.systemTemp;
-      final f = File(
-          '${tmp.path}${Platform.pathSeparator}schron_launcher_launch.log');
+      final f = File('${launcherDataDir()}${Platform.pathSeparator}launch.log');
       final line = '${DateTime.now().toIso8601String()} - $msg\n';
       await f.writeAsString(line, mode: FileMode.append, flush: true);
     } catch (_) {}
@@ -760,6 +766,13 @@ class LauncherCubit extends Cubit<LauncherState> {
             'detached start failed: $e; trying cmd fallback');
         try {
           if (Platform.isWindows) {
+            // cmd.exe reads & | < > ^ % " as commands, and quoting only for spaces let an "&"
+            // in the server password (from panel_config.json) run a command of its own. With
+            // any of them present the fallback is skipped rather than escaped.
+            final cmdMeta = RegExp(r'[&|<>^%"!]');
+            if (cmdMeta.hasMatch(exe) || cmdMeta.hasMatch(workDir) || launchArgs.any(cmdMeta.hasMatch)) {
+              throw 'cmd fallback refused: an argument carries cmd.exe metacharacters';
+            }
             // Use /D to set working directory and pass exe with args
             final quotedExe = '"' + exe + '"';
             final quotedWorkDir = '"' + workDir + '"';
@@ -928,51 +941,9 @@ class LauncherCubit extends Cubit<LauncherState> {
   /// File location: system temp directory / to_download_log
   Future<void> _appendToDownloadLog(List<RemoteFileEntry> entries, String remoteManifest, {Map<String, String>? downloadReasons}) async {
     try {
-      // Prefer writing next to our launcher exe (easy access). If that fails (e.g. permission),
-      // then fallback to game root (valheim.exe), then temp. Also record where we actually wrote the file.
-      final filename = 'download_decisions.log';
-      String? writtenPath;
-
-      // 1) Try launcher exe folder first
-      try {
-        final resolved = Platform.resolvedExecutable;
-        final exeDir = File(resolved).parent.path;
-        final tryFile = File('$exeDir${Platform.pathSeparator}$filename');
-        try {
-          await tryFile.parent.create(recursive: true);
-          await tryFile.writeAsString('', mode: FileMode.append); // touch file
-          writtenPath = tryFile.path;
-        } catch (e) {
-          // permission or IO error -> fallthrough
-          writtenPath = null;
-        }
-      } catch (_) {
-        writtenPath = null;
-      }
-
-      // 2) If not written, try game root (valheim.exe parent)
-      if (writtenPath == null) {
-        try {
-          final exe = await filesService.findValheimExecutable();
-          if (exe != null && exe.isNotEmpty) {
-            final gameDir = File(exe).parent.path;
-            final tryFile = File('$gameDir${Platform.pathSeparator}$filename');
-            try {
-              await tryFile.parent.create(recursive: true);
-              await tryFile.writeAsString('', mode: FileMode.append);
-              writtenPath = tryFile.path;
-            } catch (_) {
-              writtenPath = null;
-            }
-          }
-        } catch (_) {
-          writtenPath = null;
-        }
-      }
-
-      // 3) Last resort: system temp
-      final baseDir = writtenPath == null ? Directory.systemTemp.path : File(writtenPath).parent.path;
-      final f = File('$baseDir${Platform.pathSeparator}$filename');
+      // the per-user data folder: next to the program it broke a signed macOS .app, and the
+      // game folder is not the launcher's to litter
+      final f = File('${launcherDataDir()}${Platform.pathSeparator}download_decisions.log');
 
       final sepHeader = '===== SESSION ${DateTime.now().toIso8601String()} MANIFEST=$remoteManifest =====';
       final sepFooter = '===== END SESSION (${entries.length} files to download) =====';
@@ -1020,30 +991,7 @@ Future<void> _logDownloadTask(_LogDownloadParams params) async {
   if (entries.isEmpty) return;
   
   try {
-    const filename = 'download_decisions.log';
-    String? writtenPath;
-
-    // 1) Try launcher exe folder
-    try {
-      final exeDir = File(Platform.resolvedExecutable).parent.path;
-      final f = File('$exeDir${Platform.pathSeparator}$filename');
-      await f.parent.create(recursive: true);
-      writtenPath = f.path;
-    } catch (_) {}
-
-    // 2) Try game root
-    if (writtenPath == null && params.valheimExePath != null) {
-      try {
-        final gameDir = File(params.valheimExePath!).parent.path;
-        final f = File('$gameDir${Platform.pathSeparator}$filename');
-        await f.parent.create(recursive: true);
-        writtenPath = f.path;
-      } catch (_) {}
-    }
-
-    // 3) Temp
-    final baseDir = writtenPath == null ? Directory.systemTemp.path : File(writtenPath).parent.path;
-    final f = File('$baseDir${Platform.pathSeparator}$filename');
+    final f = File('${launcherDataDir()}${Platform.pathSeparator}download_decisions.log');
 
     final sb = StringBuffer();
     sb.writeln('===== SESSION ${DateTime.now().toIso8601String()} MANIFEST=${params.remoteManifest} =====');

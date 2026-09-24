@@ -1,3 +1,4 @@
+import 'package:server_launcher/services/game_locator.dart';
 import 'dart:io' show Platform, File, Directory;
 
 import 'package:flutter/foundation.dart';
@@ -391,7 +392,7 @@ class _LauncherScreenState extends State<LauncherScreen> {
         final url = m.backgroundUrl;
         if (url == null || url.isEmpty) return null;
         final appData =
-            Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
+            File(launcherDataDir()).parent.path;
         final sep = Platform.pathSeparator;
         final dir = '$appData${sep}schron_twarda_launcher';
         await Directory(dir).create(recursive: true);

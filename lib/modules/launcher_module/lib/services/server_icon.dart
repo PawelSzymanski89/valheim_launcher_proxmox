@@ -1,3 +1,4 @@
+import 'package:server_launcher/services/game_locator.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -79,7 +80,7 @@ class ServerIcon {
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       if (bytes == null) return;
       final dir = Directory(
-          '${Platform.environment['APPDATA'] ?? Directory.systemTemp.path}'
+          '${File(launcherDataDir()).parent.path}'
           '${Platform.pathSeparator}schron_twarda_launcher');
       await dir.create(recursive: true);
       final file = File('${dir.path}${Platform.pathSeparator}server_icon.png');

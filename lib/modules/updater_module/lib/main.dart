@@ -218,7 +218,10 @@ class _UpdaterPageState extends State<UpdaterPage> {
     _ftpUser = cfg.ftpUser;
     _ftpPass = cfg.ftpPassword;
     _serverName = cfg.serverName.isNotEmpty ? cfg.serverName : 'Updater';
-    _launcherExeName = '${_serverName} Launcher.exe';
+    // The same trimming the panel does when it names the build (_exe_base): the server name
+    // comes from panel_config.json and goes into a path - "..\\..\\Startup\\x" must not.
+    final base = _serverName.replaceAll(RegExp(r'[^A-Za-z0-9._ -]'), '').trim();
+    _launcherExeName = '${base.isEmpty ? 'Valheim' : base} Launcher.exe';
     _launcherRemote = null; // use default path
   }
 

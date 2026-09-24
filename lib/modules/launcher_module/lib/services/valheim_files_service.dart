@@ -671,11 +671,8 @@ class ValheimFilesService {
           return '${dir.path}${Platform.pathSeparator}cache.txt';
         }
       }
-      // Fallback to temp directory
-      final tmp = Directory.systemTemp;
-      final dir = Directory('${tmp.path}${Platform.pathSeparator}schron_twarda_launcher');
-      if (!await dir.exists()) await dir.create(recursive: true);
-      return '${dir.path}${Platform.pathSeparator}cache.txt';
+      // per-user data folder - never the shared temp folder (see launcherDataDir)
+      return '${launcherDataDir()}${Platform.pathSeparator}cache.txt';
     } catch (_) {
       return null;
     }
@@ -763,7 +760,7 @@ class ValheimFilesService {
         if (kDebugMode) debugPrint('[Updater] Platform.resolvedExecutable = $resolved; appRoot = $appRoot');
       } catch (_) {
         // Fallback do APPDATA
-        final appData = Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
+        final appData = File(launcherDataDir()).parent.path;
         appRoot = '$appData${Platform.pathSeparator}schron_twarda_launcher';
         try { final d = Directory(appRoot); if (!await d.exists()) await d.create(recursive: true); } catch (_) {}
         if (kDebugMode) debugPrint('[Updater] Fallback appRoot = $appRoot');
@@ -990,7 +987,7 @@ class ValheimFilesService {
         appRoot = File(resolved).parent.path;
         if (kDebugMode) debugPrint('[LauncherUpdate] appRoot = $appRoot');
       } catch (_) {
-        final appData = Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
+        final appData = File(launcherDataDir()).parent.path;
         appRoot = '$appData${Platform.pathSeparator}schron_twarda_launcher';
         if (kDebugMode) debugPrint('[LauncherUpdate] Fallback appRoot = $appRoot');
       }
@@ -1083,7 +1080,7 @@ class ValheimFilesService {
     try {
       return File(Platform.resolvedExecutable).parent.path;
     } catch (_) {
-      final appData = Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
+      final appData = File(launcherDataDir()).parent.path;
       return '$appData${Platform.pathSeparator}schron_twarda_launcher';
     }
   }
